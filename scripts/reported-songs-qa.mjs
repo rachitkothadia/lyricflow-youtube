@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {installNative} from './install-native.mjs';import {chromium} from 'playwright';import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
 const profile=await mkdtemp(path.join(tmpdir(),'lyricflow-reported-'));await installNative(profile);const c=await chromium.launchPersistentContext(profile,{executablePath:chromium.executablePath(),headless:true,ignoreDefaultArgs:['--disable-extensions'],viewport:{width:1440,height:1000},args:[`--disable-extensions-except=${path.resolve('dist')}`,`--load-extension=${path.resolve('dist')}`]});const results=[];
 try{

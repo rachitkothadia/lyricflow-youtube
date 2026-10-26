@@ -1,3 +1,17 @@
+# Release 0.6.0 — playlist priority and loading/control recovery, 2026-10-26
+
+Passed: build and 97 unit tests; 8 playlist checks; 12 manual-source/keyboard checks; 37 fullscreen, 20 browser, 21 lifecycle and 19 product checks. A clean source copy with no generated outputs passed npm ci, build, unit, lifecycle, playlist and manual-control checks.
+
+Lyrics mount as the first child of the outer sidebar with priority in flex layouts. Late modules, outer and inner playlists, container replacement and reordering preserve placement and the existing lyrics. Real YouTube mixes for Spring Day and Buzz placed lyrics above the playlist; fullscreen resizing and exit restoration also passed. Four earlier reported songs still loaded automatically with live sources.
+
+Shared Genius links accept www, tracking parameters, fragments and trailing slashes. Enter submits the link. Explicit links read the selected page's identity and work before metadata detection; automatic matches retain identity validation. Real Genius/network checks loaded Buzz from a shared link while the playing fixture had a different detected title. Parser checks also confirmed inert content and wrong-host/automatic identity rejection; three other real Genius pages were rechecked.
+
+Delay entry now applies valid tenths without rewriting the field/caret during each keystroke; formatting and bounds commit on blur. Real character-by-character negative and positive decimal entry changed actual video seek positions. Timing search prefers safely matched source timestamps, expands past plain or irrelevant early results, and preserves readable lyrics on optional search failure. A query-specific 503 no longer imposes a global undocumented minute-long cooldown; actual 429/Retry-After backoff remains enforced. Genius follow-up failures preserve plausible choices instead of discarding them.
+
+Per user preference, no estimated timings are generated. Buzz returned no matching LRCLIB timing record in the checked searches; its Genius text remains readable with a visible No line timing available notice and disabled timing controls. A declared YouTube auto-caption track returned no caption payload to the ordinary request; no caption-based synchronization is claimed. Community timing and future upstream availability remain external limits.
+
+Evidence is generated under output/reliability, output/playlist, output/fullscreen, output/fixes, output/playwright and output/product. Reports retain metadata/counts only. The repository was published publicly under MIT as base commit d6a644a before the follow-up fixes. Original-source MIT terms and dependency/dictionary notices are included separately.
+
 # Release 0.5.0 — fullscreen lyrics, timing delay and replay, 2026-10-26
 
 Passed: TypeScript/bundled build; 87 unit tests; 37 focused fullscreen/playback checks; existing 20 browser, 21 lifecycle and 19 product checks. New coverage includes actual browser fullscreen entry/exit, direct-player and anonymous nested wrappers, pointer and keyboard resizing, minimum-width settings overflow, bounded video/control placement, hide/show, viewport changes, exact tenths from -10 to +10, delay-aware lyric seeking, automatic playback/follow recovery, Enter/Space, untimed handling and navigation cleanup. Seek targets are bounded to real seekable ranges; unit cases include live DVR windows and discontinuities.

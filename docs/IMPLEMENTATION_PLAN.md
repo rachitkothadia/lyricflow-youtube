@@ -1,3 +1,7 @@
+# Release 0.6 delivery update
+
+Completed and checked: persistent playlist priority; verified-timing preference and fallback searches; provider-error recovery without false global cooldowns; canonical/manual Genius URLs and Enter submission; character-safe decimal delay editing; clean-source setup verification; public MIT repository and release packaging. Untimed sources remain explicit, with no estimated timing, as requested.
+
 # Release 0.5 delivery update
 
 Completed: fullscreen lyrics with a bounded drag/keyboard divider, scoped video/control layout, hide/show, exit restoration and SPA cleanup; per-song delay from -10 to +10 seconds in exact tenths; offset-aware lyric seeking and playback; actual seekable/DVR range bounds; browser microsecond timestamp precision handling. Untimed text remains readable with seeking unavailable. Verification includes installed-extension fixtures and actual YouTube fullscreen on timed and untimed sources.

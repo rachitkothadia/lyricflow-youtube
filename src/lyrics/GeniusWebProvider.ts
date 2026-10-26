@@ -51,27 +51,35 @@ export class GeniusWebProvider {
     GeniusPage | { kind: "ambiguous"; candidates: Candidate[] } | null
   > {
     const found = new Map<number, Candidate>();
+    const plausible = (c: Candidate) =>
+      c.score! >= 0.55 || titleSimilarity(song.title, c.title) >= 0.9;
     for (const query of searchQueries(song)) {
-      const data = JSON.parse(
-        await this.request(
-          "https://genius.com/api/search?" + new URLSearchParams({ q: query }),
-          signal,
-        ),
-      );
-      for (const c of parseGeniusResults(data))
-        found.set(c.id, { ...c, provider: "genius" });
-      const chosen = chooseCandidate(song, [...found.values()]);
-      if (chosen)
-        return this.page(
-          chosen.url,
-          { ...chosen, duration: song.duration },
-          signal,
+      try {
+        const data = JSON.parse(
+          await this.request(
+            "https://genius.com/api/search?" +
+              new URLSearchParams({ q: query }),
+            signal,
+          ),
         );
+        for (const c of parseGeniusResults(data))
+          found.set(c.id, { ...c, provider: "genius" });
+        const chosen = chooseCandidate(song, [...found.values()]);
+        if (chosen)
+          return this.page(
+            chosen.url,
+            { ...chosen, duration: song.duration },
+            signal,
+          );
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!rankCandidates(song, [...found.values()]).some(plausible))
+          throw error;
+        break;
+      }
     }
     const candidates = [...found.values()];
-    const ranked = rankCandidates(song, candidates).filter(
-      (c) => c.score! >= 0.55 || titleSimilarity(song.title, c.title) >= 0.9,
-    );
+    const ranked = rankCandidates(song, candidates).filter(plausible);
     return ranked.length
       ? { kind: "ambiguous", candidates: ranked.slice(0, 5) }
       : null;

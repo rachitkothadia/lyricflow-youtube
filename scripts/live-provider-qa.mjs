@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {installNative} from './install-native.mjs';
 import {chromium} from 'playwright';
 import {mkdtemp,readFile,writeFile,mkdir,rm} from 'node:fs/promises';

@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {installNative} from './install-native.mjs';
 import {chromium} from 'playwright';
 import {mkdtemp,rm,writeFile,mkdir} from 'node:fs/promises';
@@ -11,9 +12,12 @@ try {
  await mkdir('output/fullscreen',{recursive:true});
  const page=await context.newPage();page.setDefaultTimeout(30000);
  for(const [name,id] of [['Spring Day','xEeFrLSkMm8'],['Buzz','EtRDi6HhCfg']]){
-  await page.goto('https://www.youtube.com/watch?v='+id,{waitUntil:'domcontentloaded',timeout:60000});
+  await page.goto('https://www.youtube.com/watch?v='+id+'&list=RD'+id+'&start_radio=1',{waitUntil:'domcontentloaded',timeout:60000});
   await page.locator('#lyricflow-root .line').first().waitFor({timeout:60000});
   const root=page.locator('#lyricflow-root'),timed=await page.locator('button.line').count(),count=await page.locator('.line').count();
+  await page.locator('ytd-playlist-panel-renderer').first().waitFor({timeout:30000});
+  const sidebar=await root.evaluate(e=>{const p=document.querySelector('ytd-playlist-panel-renderer').getBoundingClientRect(),r=e.getBoundingClientRect();return {parent:e.parentElement.id,first:e.parentElement.firstElementChild===e,bottom:r.bottom,playlistTop:p.top};});
+  assert.equal(sidebar.parent,'secondary');assert.ok(sidebar.first&&sidebar.bottom<=sidebar.playlistTop+1,JSON.stringify(sidebar));
   if(name==='Spring Day')assert.ok(timed>20,'Live timestamps required');
   if(timed){
    await page.getByLabel('Lyrics options',{exact:true}).click();await page.getByLabel('Timing offset (seconds)',{exact:true}).fill('0.6');await page.getByLabel('Lyrics options',{exact:true}).click();
@@ -34,7 +38,7 @@ try {
   await page.screenshot({path:`output/fullscreen/live-${id}.png`});
   await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>document.querySelector('#lyricflow-root')?.parentElement.id==='secondary');
   assert.equal(await page.locator('.line').count(),count);
-  results.push({name,id,lines:count,timedLines:timed,before,after,fullscreenSeekVerified:!!timed,sidebarRestored:true});console.log('PASS',name,JSON.stringify(results.at(-1)));
+  results.push({name,id,lines:count,timedLines:timed,before,after,sidebar,fullscreenSeekVerified:!!timed,sidebarRestored:true});console.log('PASS',name,JSON.stringify(results.at(-1)));
  }
  await writeFile('output/fullscreen/live.json',JSON.stringify({scope:'Installed MV3, actual YouTube fullscreen control, real provider lyrics and actual video seek',passed:results.length,results},null,2));
 } finally {await context.close();await rm(profile,{recursive:true,force:true});}

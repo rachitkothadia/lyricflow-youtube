@@ -1,102 +1,433 @@
-import {chromium} from 'playwright';
-import {readFile,writeFile,mkdtemp,rm,mkdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import path from 'node:path';
-import assert from 'node:assert/strict';
-const profile=await mkdtemp(path.join(tmpdir(),'lyricflow-fullscreen-'));
-const context=await chromium.launchPersistentContext(profile,{executablePath:chromium.executablePath(),headless:true,ignoreDefaultArgs:['--disable-extensions'],viewport:{width:1440,height:1000},args:[`--disable-extensions-except=${path.resolve('dist')}`,`--load-extension=${path.resolve('dist')}`]});
-const checks=[];
-const check=(name,value)=>{assert.ok(value,name);checks.push(name);console.log('PASS',name);};
+import "./qa-output.mjs";
+import { chromium } from "playwright";
+import { readFile, writeFile, mkdtemp, rm, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import assert from "node:assert/strict";
+const profile = await mkdtemp(path.join(tmpdir(), "lyricflow-fullscreen-"));
+const context = await chromium.launchPersistentContext(profile, {
+  executablePath: chromium.executablePath(),
+  headless: true,
+  ignoreDefaultArgs: ["--disable-extensions"],
+  viewport: { width: 1440, height: 1000 },
+  args: [
+    `--disable-extensions-except=${path.resolve("dist")}`,
+    `--load-extension=${path.resolve("dist")}`,
+  ],
+});
+const checks = [];
+const check = (name, value) => {
+  assert.ok(value, name);
+  checks.push(name);
+  console.log("PASS", name);
+};
 try {
- const page=await context.newPage();page.setDefaultTimeout(15000);
- const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const html=(await readFile('fixtures/watch.html','utf8')).replace('<script src="/content.js"></script>','');
- await page.route('https://www.youtube.com/**',async route=>{
-  if(!route.request().url().endsWith('silent.webm'))return route.fulfill({contentType:'text/html',body:html});
-  const bytes=await readFile('fixtures/silent.webm'),range=route.request().headers().range?.match(/^bytes=(\d+)-(\d*)$/);
-  const start=range?Number(range[1]):0,end=range?.[2]?Math.min(Number(range[2]),bytes.length-1):bytes.length-1;
-  await route.fulfill({status:range?206:200,contentType:'video/webm',headers:{'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(range?{'Content-Range':`bytes ${start}-${end}/${bytes.length}`}:{})},body:bytes.subarray(start,end+1)});
- });
- await page.goto('https://www.youtube.com/watch?v=fullscreen-test');
- const root=page.locator('#lyricflow-root');await root.waitFor();
- const menu=async()=>{if(!await page.locator('.settings').evaluate(e=>e.open))await page.getByLabel('Lyrics options',{exact:true}).click();};
- await menu();await page.getByText('More settings',{exact:true}).click();await page.getByRole('button',{name:'Try synthetic demo',exact:true}).click();
- await page.waitForFunction(()=>document.querySelector('video').readyState>=2);
- const pause=()=>page.evaluate(()=>document.querySelector('video').pause());
- const time=()=>page.evaluate(()=>document.querySelector('video').currentTime);
- const clickLine=async index=>{await page.locator('button.line').nth(index).click();await page.waitForFunction(()=>!document.querySelector('video').paused&&!document.querySelector('video').seeking);await pause();};
- check('timed lines are real keyboard-accessible buttons',await page.locator('button.line').count()===10);
- await clickLine(4);check('clicking a lyric seeks and starts playback',Math.abs(await time()-16)<.6);
- await menu();const offset=page.getByLabel('Timing offset (seconds)',{exact:true});
- check('timing range is -10 to +10 with 0.1 steps',await offset.evaluate(e=>e.min==='-10'&&e.max==='10'&&e.step==='0.1'));
- for(let i=0;i<10;i++)await page.getByRole('button',{name:'Lyrics later by 0.1 seconds'}).click();
- check('repeated 0.1 increments have no decimal drift',await offset.inputValue()==='1.0');
- for(let i=0;i<20;i++)await page.getByRole('button',{name:'Lyrics earlier by 0.1 seconds'}).click();
- check('repeated 0.1 decrements cross zero exactly',await offset.inputValue()==='-1.0');
- await offset.fill('10.7');check('positive delay is bounded',await offset.inputValue()==='10.0');
- await offset.fill('-10.8');check('negative delay is bounded',await offset.inputValue()==='-10.0');
- await offset.fill('1.26');check('typed delay rounds to tenths',await offset.inputValue()==='1.3');
- await offset.press('ArrowUp');check('native keyboard step is one tenth',await offset.inputValue()==='1.4');
- await offset.fill('2');await page.getByLabel('Lyrics options',{exact:true}).click();await clickLine(4);
- check('positive delay is included when seeking',Math.abs(await time()-18)<.6);
- console.log('SEEK_STATE',JSON.stringify(await page.evaluate(()=>{const s=document.querySelector('#lyricflow-root').shadowRoot;return {video:document.querySelector('video').currentTime,offset:s.querySelector('input[type=number]').value,active:s.querySelector('.line.active')?.dataset.time};})));
- await page.waitForFunction(()=>document.querySelector('#lyricflow-root').shadowRoot.querySelector('.line.active')?.dataset.time==='16');
- check('seeked lyric is also the highlighted lyric',await page.locator('.line.active').getAttribute('data-time')==='16');
- await menu();await offset.fill('-2');await page.getByLabel('Lyrics options',{exact:true}).click();await clickLine(4);
- check('negative delay is included when seeking',Math.abs(await time()-14)<.6);
- await page.locator('button.line').nth(2).focus();await page.keyboard.press('Enter');await pause();
- check('Enter activates a lyric',Math.abs(await time()-6)<.6);
- await page.locator('button.line').nth(3).focus();await page.keyboard.press('Space');await pause();
- check('Space activates a lyric',Math.abs(await time()-10)<.6);
- await page.evaluate(()=>{
-  window.originalLyricsRoot=document.querySelector('#lyricflow-root');
-  const video=document.querySelector('video'),player=document.createElement('div'),container=document.createElement('div');
-  player.id='movie_player';player.style.cssText='position:relative;width:100%;height:400px;background:#070b0b';
-  container.className='html5-video-container';container.style.cssText='position:relative;width:100%;height:100%';
-  video.before(player);player.append(container);container.append(video);
-  const controls=document.createElement('div');controls.className='ytp-chrome-bottom';controls.style.cssText='position:absolute;bottom:12px;left:12px;height:24px';player.append(controls);
-  const button=document.createElement('button');button.textContent='Enter fullscreen test';button.onclick=()=>player.requestFullscreen();controls.append(button);
-  const style=document.createElement('style');style.textContent='#movie_player:fullscreen{width:100vw!important;height:100vh!important}';document.head.append(style);
- });
- const enter=async()=>{await page.getByRole('button',{name:'Enter fullscreen test',exact:true}).click();await page.waitForFunction(()=>!!document.fullscreenElement&&document.querySelector('#lyricflow-root')?.hasAttribute('fullscreen'));};
- const geometry=()=>root.evaluate(e=>{const r=e.getBoundingClientRect(),v=document.querySelector('video').getBoundingClientRect(),c=document.querySelector('.ytp-chrome-bottom').getBoundingClientRect();return {width:r.width,left:r.left,height:r.height,videoRight:v.right,controlsRight:c.right,screen:innerWidth,parent:e.parentElement.id};});
- await enter();let initial=await geometry();
- check('actual Fullscreen API mounts the existing panel inside the player',initial.parent==='movie_player'&&await root.evaluate(e=>e===window.originalLyricsRoot));
- check('fullscreen panel uses screen height',initial.height>700);
- check('video and player controls remain left of lyrics',initial.videoRight<=initial.left&&initial.controlsRight<=initial.left);
- const divider=page.getByRole('separator',{name:'Resize lyrics panel'}),box=await divider.boundingBox();
- await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x-180,box.y+box.height/2,{steps:12});await page.mouse.up();
- let wider=await geometry();check('dragging left expands lyrics and shrinks the video area',wider.width>initial.width+150&&wider.videoRight<initial.videoRight-150&&wider.videoRight<=wider.left);
- await divider.focus();await page.keyboard.press('Home');const small=await geometry();
- await menu();check('timing menu fits the minimum panel width',await page.locator('.menu').evaluate(e=>e.scrollWidth<=e.clientWidth));await page.getByLabel('Lyrics options',{exact:true}).click();await divider.focus();await page.keyboard.press('ArrowLeft');
- check('keyboard divider resizing increases width by 32px',Math.abs((await geometry()).width-small.width-32)<2);
- await page.keyboard.press('End');check('divider has an upper width limit',(await geometry()).width<=initial.screen*.65+1);
- await page.getByRole('button',{name:'Hide lyrics',exact:true}).click();
- check('hide restores full video width',await page.locator('video').evaluate(e=>e.getBoundingClientRect().width>=innerWidth-2));
- await page.getByRole('button',{name:'Show lyrics',exact:true}).click();check('show restores panel and lyrics',await page.locator('.line').count()===10&&await page.locator('.viewport').isVisible());
- await menu();check('fullscreen preserves the song timing adjustment',await offset.inputValue()==='-2.0');await page.getByLabel('Lyrics options',{exact:true}).click();await clickLine(4);
- check('fullscreen lyric click seeks with the same offset',Math.abs(await time()-14)<.6);
- await page.locator('.viewport').hover();await page.mouse.wheel(0,-250);await page.getByRole('button',{name:'Resume following'}).waitFor();await clickLine(5);
- check('clicking a line resumes automatic following',await page.getByRole('button',{name:'Resume following'}).isHidden());
- await page.setViewportSize({width:760,height:720});await page.waitForFunction(()=>document.querySelector('#lyricflow-root').getBoundingClientRect().width<=innerWidth*.65+1);
- const narrow=await geometry();check('resize keeps lyrics and video in separate bounded regions',narrow.videoRight<=narrow.left&&narrow.width<=narrow.screen*.65+1);
- await page.screenshot({path:'output/fullscreen/resized.png'});
- await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>document.querySelector('#lyricflow-root').parentElement.id==='secondary');
- check('exit restores the same compact sidebar without player styles',await root.evaluate(e=>e===window.originalLyricsRoot&&!e.hasAttribute('fullscreen')&&!document.querySelector('[data-lyricflow-fullscreen]')));
- check('normal panel remains compact',(await root.boundingBox()).height<400);
- await menu();check('exit preserves timing offset',await offset.inputValue()==='-2.0');await page.getByRole('button',{name:'Reset',exact:true}).click();check('reset returns to exact zero',await offset.inputValue()==='0.0');
- await page.getByText('More settings',{exact:true}).click();
- await page.locator('input[type=file]').setInputFiles({name:'untimed.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({song:{title:'Untimed fixture',artist:'Test author',version:''},romanized:true,provenance:'user-confirmed',sourceUrl:'https://genius.com/Test-author-untimed-fixture-lyrics',lines:[{text:'Synthetic untimed text'},{text:'Another synthetic line'}]}))});
- await page.waitForFunction(()=>document.querySelector('#lyricflow-root').shadowRoot.querySelectorAll('p.line').length===2);
- check('untimed lyrics remain readable without fake seek buttons',await page.locator('button.line').count()===0);
- await menu();check('untimed source disables timing adjustments',await offset.isDisabled());
- await page.getByLabel('Lyrics options',{exact:true}).click();
- await page.evaluate(()=>{const player=document.querySelector('#movie_player'),wrapper=document.createElement('div');wrapper.style.cssText='position:relative;width:100%;height:100%;background:#070b0b';player.before(wrapper);wrapper.append(player);player.querySelector('button').onclick=()=>wrapper.requestFullscreen();});
- await enter();check('untimed lyrics also appear in fullscreen',await page.locator('p.line').first().isVisible());
- check('anonymous nested fullscreen wrappers also reserve video space',await page.locator('#movie_player').getAttribute('data-lyricflow-player')==='nested'&&(await geometry()).videoRight<=(await geometry()).left);
- await page.evaluate(()=>{history.pushState({},'', '/results');document.dispatchEvent(new Event('yt-navigate-finish'));});
- await page.waitForFunction(()=>!document.querySelector('#lyricflow-root'));
- check('navigation cleans fullscreen player styles',await page.locator('[data-lyricflow-fullscreen]').count()===0);
- check('no page errors',errors.length===0);
- await writeFile('output/fullscreen/results.json',JSON.stringify({passed:checks.length,scope:'Installed MV3 extension, routed YouTube fixture, actual video playback and browser Fullscreen API',checks,errors},null,2));
-} finally {await context.close();await rm(profile,{recursive:true,force:true});}
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const html = (await readFile("fixtures/watch.html", "utf8")).replace(
+    '<script src="/content.js"></script>',
+    "",
+  );
+  await page.route("https://www.youtube.com/**", async (route) => {
+    if (!route.request().url().endsWith("silent.webm"))
+      return route.fulfill({ contentType: "text/html", body: html });
+    const bytes = await readFile("fixtures/silent.webm"),
+      range = route
+        .request()
+        .headers()
+        .range?.match(/^bytes=(\d+)-(\d*)$/);
+    const start = range ? Number(range[1]) : 0,
+      end = range?.[2]
+        ? Math.min(Number(range[2]), bytes.length - 1)
+        : bytes.length - 1;
+    await route.fulfill({
+      status: range ? 206 : 200,
+      contentType: "video/webm",
+      headers: {
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(end - start + 1),
+        ...(range
+          ? { "Content-Range": `bytes ${start}-${end}/${bytes.length}` }
+          : {}),
+      },
+      body: bytes.subarray(start, end + 1),
+    });
+  });
+  await page.goto("https://www.youtube.com/watch?v=fullscreen-test");
+  const root = page.locator("#lyricflow-root");
+  await root.waitFor();
+  const menu = async () => {
+    if (!(await page.locator(".settings").evaluate((e) => e.open)))
+      await page.getByLabel("Lyrics options", { exact: true }).click();
+  };
+  await menu();
+  await page.getByText("More settings", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Try synthetic demo", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.querySelector("video").readyState >= 2,
+  );
+  const pause = () =>
+    page.evaluate(() => document.querySelector("video").pause());
+  const time = () =>
+    page.evaluate(() => document.querySelector("video").currentTime);
+  const clickLine = async (index) => {
+    await page.locator("button.line").nth(index).click();
+    await page.waitForFunction(
+      () =>
+        !document.querySelector("video").paused &&
+        !document.querySelector("video").seeking,
+    );
+    await pause();
+  };
+  check(
+    "timed lines are real keyboard-accessible buttons",
+    (await page.locator("button.line").count()) === 10,
+  );
+  await clickLine(4);
+  check(
+    "clicking a lyric seeks and starts playback",
+    Math.abs((await time()) - 16) < 0.6,
+  );
+  await menu();
+  const offset = page.getByLabel("Timing offset (seconds)", { exact: true });
+  check(
+    "timing range is -10 to +10 with 0.1 steps",
+    await offset.evaluate(
+      (e) => e.min === "-10" && e.max === "10" && e.step === "0.1",
+    ),
+  );
+  for (let i = 0; i < 10; i++)
+    await page
+      .getByRole("button", { name: "Lyrics later by 0.1 seconds" })
+      .click();
+  check(
+    "repeated 0.1 increments have no decimal drift",
+    (await offset.inputValue()) === "1.0",
+  );
+  for (let i = 0; i < 20; i++)
+    await page
+      .getByRole("button", { name: "Lyrics earlier by 0.1 seconds" })
+      .click();
+  check(
+    "repeated 0.1 decrements cross zero exactly",
+    (await offset.inputValue()) === "-1.0",
+  );
+  await offset.fill("10.7");
+  await offset.blur();
+  check("positive delay is bounded", (await offset.inputValue()) === "10.0");
+  await offset.fill("-10.8");
+  await offset.blur();
+  check("negative delay is bounded", (await offset.inputValue()) === "-10.0");
+  await offset.fill("1.26");
+  await offset.blur();
+  check("typed delay rounds to tenths", (await offset.inputValue()) === "1.3");
+  await offset.press("ArrowUp");
+  check(
+    "native keyboard step is one tenth",
+    (await offset.inputValue()) === "1.4",
+  );
+  await offset.fill("2");
+  await page.getByLabel("Lyrics options", { exact: true }).click();
+  await clickLine(4);
+  check(
+    "positive delay is included when seeking",
+    Math.abs((await time()) - 18) < 0.6,
+  );
+  console.log(
+    "SEEK_STATE",
+    JSON.stringify(
+      await page.evaluate(() => {
+        const s = document.querySelector("#lyricflow-root").shadowRoot;
+        return {
+          video: document.querySelector("video").currentTime,
+          offset: s.querySelector("input[type=number]").value,
+          active: s.querySelector(".line.active")?.dataset.time,
+        };
+      }),
+    ),
+  );
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("#lyricflow-root")
+        .shadowRoot.querySelector(".line.active")?.dataset.time === "16",
+  );
+  check(
+    "seeked lyric is also the highlighted lyric",
+    (await page.locator(".line.active").getAttribute("data-time")) === "16",
+  );
+  await menu();
+  await offset.fill("-2");
+  await page.getByLabel("Lyrics options", { exact: true }).click();
+  await clickLine(4);
+  check(
+    "negative delay is included when seeking",
+    Math.abs((await time()) - 14) < 0.6,
+  );
+  await page.locator("button.line").nth(2).focus();
+  await page.keyboard.press("Enter");
+  await pause();
+  check("Enter activates a lyric", Math.abs((await time()) - 6) < 0.6);
+  await page.locator("button.line").nth(3).focus();
+  await page.keyboard.press("Space");
+  await pause();
+  check("Space activates a lyric", Math.abs((await time()) - 10) < 0.6);
+  await page.evaluate(() => {
+    window.originalLyricsRoot = document.querySelector("#lyricflow-root");
+    const video = document.querySelector("video"),
+      player = document.createElement("div"),
+      container = document.createElement("div");
+    player.id = "movie_player";
+    player.style.cssText =
+      "position:relative;width:100%;height:400px;background:#070b0b";
+    container.className = "html5-video-container";
+    container.style.cssText = "position:relative;width:100%;height:100%";
+    video.before(player);
+    player.append(container);
+    container.append(video);
+    const controls = document.createElement("div");
+    controls.className = "ytp-chrome-bottom";
+    controls.style.cssText =
+      "position:absolute;bottom:12px;left:12px;height:24px";
+    player.append(controls);
+    const button = document.createElement("button");
+    button.textContent = "Enter fullscreen test";
+    button.onclick = () => player.requestFullscreen();
+    controls.append(button);
+    const style = document.createElement("style");
+    style.textContent =
+      "#movie_player:fullscreen{width:100vw!important;height:100vh!important}";
+    document.head.append(style);
+  });
+  const enter = async () => {
+    await page
+      .getByRole("button", { name: "Enter fullscreen test", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        !!document.fullscreenElement &&
+        document.querySelector("#lyricflow-root")?.hasAttribute("fullscreen"),
+    );
+  };
+  const geometry = () =>
+    root.evaluate((e) => {
+      const r = e.getBoundingClientRect(),
+        v = document.querySelector("video").getBoundingClientRect(),
+        c = document
+          .querySelector(".ytp-chrome-bottom")
+          .getBoundingClientRect();
+      return {
+        width: r.width,
+        left: r.left,
+        height: r.height,
+        videoRight: v.right,
+        controlsRight: c.right,
+        screen: innerWidth,
+        parent: e.parentElement.id,
+      };
+    });
+  await enter();
+  let initial = await geometry();
+  check(
+    "actual Fullscreen API mounts the existing panel inside the player",
+    initial.parent === "movie_player" &&
+      (await root.evaluate((e) => e === window.originalLyricsRoot)),
+  );
+  check("fullscreen panel uses screen height", initial.height > 700);
+  check(
+    "video and player controls remain left of lyrics",
+    initial.videoRight <= initial.left && initial.controlsRight <= initial.left,
+  );
+  const divider = page.getByRole("separator", { name: "Resize lyrics panel" }),
+    box = await divider.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 180, box.y + box.height / 2, { steps: 12 });
+  await page.mouse.up();
+  let wider = await geometry();
+  check(
+    "dragging left expands lyrics and shrinks the video area",
+    wider.width > initial.width + 150 &&
+      wider.videoRight < initial.videoRight - 150 &&
+      wider.videoRight <= wider.left,
+  );
+  await divider.focus();
+  await page.keyboard.press("Home");
+  const small = await geometry();
+  await menu();
+  check(
+    "timing menu fits the minimum panel width",
+    await page.locator(".menu").evaluate((e) => e.scrollWidth <= e.clientWidth),
+  );
+  await page.getByLabel("Lyrics options", { exact: true }).click();
+  await divider.focus();
+  await page.keyboard.press("ArrowLeft");
+  check(
+    "keyboard divider resizing increases width by 32px",
+    Math.abs((await geometry()).width - small.width - 32) < 2,
+  );
+  await page.keyboard.press("End");
+  check(
+    "divider has an upper width limit",
+    (await geometry()).width <= initial.screen * 0.65 + 1,
+  );
+  await page.getByRole("button", { name: "Hide lyrics", exact: true }).click();
+  check(
+    "hide restores full video width",
+    await page
+      .locator("video")
+      .evaluate((e) => e.getBoundingClientRect().width >= innerWidth - 2),
+  );
+  await page.getByRole("button", { name: "Show lyrics", exact: true }).click();
+  check(
+    "show restores panel and lyrics",
+    (await page.locator(".line").count()) === 10 &&
+      (await page.locator(".viewport").isVisible()),
+  );
+  await menu();
+  check(
+    "fullscreen preserves the song timing adjustment",
+    (await offset.inputValue()) === "-2.0",
+  );
+  await page.getByLabel("Lyrics options", { exact: true }).click();
+  await clickLine(4);
+  check(
+    "fullscreen lyric click seeks with the same offset",
+    Math.abs((await time()) - 14) < 0.6,
+  );
+  await page.locator(".viewport").hover();
+  await page.mouse.wheel(0, -250);
+  await page.getByRole("button", { name: "Resume following" }).waitFor();
+  await clickLine(5);
+  check(
+    "clicking a line resumes automatic following",
+    await page.getByRole("button", { name: "Resume following" }).isHidden(),
+  );
+  await page.setViewportSize({ width: 760, height: 720 });
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#lyricflow-root").getBoundingClientRect().width <=
+      innerWidth * 0.65 + 1,
+  );
+  const narrow = await geometry();
+  check(
+    "resize keeps lyrics and video in separate bounded regions",
+    narrow.videoRight <= narrow.left &&
+      narrow.width <= narrow.screen * 0.65 + 1,
+  );
+  await page.screenshot({ path: "output/fullscreen/resized.png" });
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#lyricflow-root").parentElement.id ===
+      "secondary",
+  );
+  check(
+    "exit restores the same compact sidebar without player styles",
+    await root.evaluate(
+      (e) =>
+        e === window.originalLyricsRoot &&
+        !e.hasAttribute("fullscreen") &&
+        !document.querySelector("[data-lyricflow-fullscreen]"),
+    ),
+  );
+  check(
+    "normal panel remains compact",
+    (await root.boundingBox()).height < 400,
+  );
+  await menu();
+  check("exit preserves timing offset", (await offset.inputValue()) === "-2.0");
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  check("reset returns to exact zero", (await offset.inputValue()) === "0.0");
+  await page.getByText("More settings", { exact: true }).click();
+  await page
+    .locator("input[type=file]")
+    .setInputFiles({
+      name: "untimed.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          song: {
+            title: "Untimed fixture",
+            artist: "Test author",
+            version: "",
+          },
+          romanized: true,
+          provenance: "user-confirmed",
+          sourceUrl: "https://genius.com/Test-author-untimed-fixture-lyrics",
+          lines: [
+            { text: "Synthetic untimed text" },
+            { text: "Another synthetic line" },
+          ],
+        }),
+      ),
+    });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("#lyricflow-root")
+        .shadowRoot.querySelectorAll("p.line").length === 2,
+  );
+  check(
+    "untimed lyrics remain readable without fake seek buttons",
+    (await page.locator("button.line").count()) === 0,
+  );
+  await menu();
+  check(
+    "untimed source disables timing adjustments",
+    await offset.isDisabled(),
+  );
+  await page.getByLabel("Lyrics options", { exact: true }).click();
+  await page.evaluate(() => {
+    const player = document.querySelector("#movie_player"),
+      wrapper = document.createElement("div");
+    wrapper.style.cssText =
+      "position:relative;width:100%;height:100%;background:#070b0b";
+    player.before(wrapper);
+    wrapper.append(player);
+    player.querySelector("button").onclick = () => wrapper.requestFullscreen();
+  });
+  await enter();
+  check(
+    "untimed lyrics also appear in fullscreen",
+    await page.locator("p.line").first().isVisible(),
+  );
+  check(
+    "anonymous nested fullscreen wrappers also reserve video space",
+    (await page
+      .locator("#movie_player")
+      .getAttribute("data-lyricflow-player")) === "nested" &&
+      (await geometry()).videoRight <= (await geometry()).left,
+  );
+  await page.evaluate(() => {
+    history.pushState({}, "", "/results");
+    document.dispatchEvent(new Event("yt-navigate-finish"));
+  });
+  await page.waitForFunction(() => !document.querySelector("#lyricflow-root"));
+  check(
+    "navigation cleans fullscreen player styles",
+    (await page.locator("[data-lyricflow-fullscreen]").count()) === 0,
+  );
+  check("no page errors", errors.length === 0);
+  await writeFile(
+    "output/fullscreen/results.json",
+    JSON.stringify(
+      {
+        passed: checks.length,
+        scope:
+          "Installed MV3 extension, routed YouTube fixture, actual video playback and browser Fullscreen API",
+        checks,
+        errors,
+      },
+      null,
+      2,
+    ),
+  );
+} finally {
+  await context.close();
+  await rm(profile, { recursive: true, force: true });
+}

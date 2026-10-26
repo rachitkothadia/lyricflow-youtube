@@ -190,7 +190,11 @@ export function chooseRecord(
 }
 function hasVerifiedTiming(record: LrclibRecord): boolean {
   if (!record.syncedLyrics || record.instrumental) return false;
-  try { return parseLrc(record.syncedLyrics).length > 0; } catch { return false; }
+  try {
+    return parseLrc(record.syncedLyrics).length > 0;
+  } catch {
+    return false;
+  }
 }
 function selectRecord(song: Song, records: LrclibRecord[]): Candidate | null {
   const ranked = rankRecords(song, records),
@@ -304,8 +308,9 @@ export class LrclibProvider {
                     1,
                     ((retry ? Date.parse(retry) : 0) - Date.now()) / 1000,
                   ) || 60;
-            blockedUntil =
-              Date.now() + Math.max(1, Math.min(seconds, 3600)) * 1000;
+            if (r.status === 429 || retry)
+              blockedUntil =
+                Date.now() + Math.max(1, Math.min(seconds, 3600)) * 1000;
             throw new ProviderError(
               "rate-limit",
               "Lyrics service is busy. Please retry later.",
@@ -358,17 +363,24 @@ export class LrclibProvider {
       .filter((r): r is LrclibRecord => !!r);
     if (!selectRecord(song, records.filter(hasVerifiedTiming))) {
       try {
-      value = await this.request(
-        "/api/search?" +
-          new URLSearchParams({
-            q: searchQueries(song)[0],
-          }),
-        signal,
-      );
-      if (Array.isArray(value))
-        records = [...new Map([...records, ...value
-          .map(validateRecord)
-          .filter((r): r is LrclibRecord => !!r)].map(r => [r.id, r])).values()];
+        value = await this.request(
+          "/api/search?" +
+            new URLSearchParams({
+              q: searchQueries(song)[0],
+            }),
+          signal,
+        );
+        if (Array.isArray(value))
+          records = [
+            ...new Map(
+              [
+                ...records,
+                ...value
+                  .map(validateRecord)
+                  .filter((r): r is LrclibRecord => !!r),
+              ].map((r) => [r.id, r]),
+            ).values(),
+          ];
       } catch (error) {
         signal.throwIfAborted();
         if (!records.length) throw error;

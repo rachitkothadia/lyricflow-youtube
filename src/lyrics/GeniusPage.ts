@@ -1,9 +1,12 @@
 import { Lyrics, LyricLine, Song, safeGeniusUrl, normalize } from "../model";
+import { artistCredits, cleanTitle } from "../matching/identity";
+import { recordingVersion } from "./LrclibProvider";
 /** Parse inert provider HTML; render text nodes only, never provider markup or scripts. */
 export function readGeniusPage(
   html: string,
   url: string,
   expected: Song,
+  manual = false,
 ): Lyrics {
   if (html.length > 2500000) throw new Error("Genius response was too large.");
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -19,7 +22,32 @@ export function readGeniusPage(
   const pageTitle = doc
     .querySelector('meta[property="og:title"]')
     ?.getAttribute("content");
+  let song = expected;
+  if (manual) {
+    const identity = (pageTitle || doc.title)
+      .replace(/\s*[|｜].*$/, "")
+      .match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    if (identity) {
+      let artist = identity[1].trim(),
+        title = identity[2].trim().replace(/\s+Lyrics$/i, "");
+      if (normalize(artist) === "genius romanizations") {
+        const recording = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+        if (recording) {
+          artist = recording[1];
+          title = recording[2];
+        }
+      }
+      const artists = artistCredits(artist);
+      song = {
+        artist: artist.slice(0, 300),
+        title: cleanTitle(title).slice(0, 300),
+        version: recordingVersion(title),
+        ...(artists.length > 1 ? { artists } : {}),
+      };
+    } else song = { artist: "", title: "Genius lyrics", version: "" };
+  }
   if (
+    !manual &&
     pageTitle &&
     !normalize(pageTitle).includes(
       normalize(expected.title.replace(/\s*[([]romanized[)\]]\s*$/i, "")),
@@ -60,7 +88,7 @@ export function readGeniusPage(
   if (!lines.length || lines.length > 1000)
     throw new Error("Genius returned an invalid number of lyric lines.");
   return {
-    song: expected,
+    song,
     lines,
     sourceUrl: safeGeniusUrl(url),
     sourceLabel: "Genius",

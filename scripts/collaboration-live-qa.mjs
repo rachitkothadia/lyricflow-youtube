@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {installNative} from './install-native.mjs';import {chromium} from 'playwright';import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
 // Test URLs only; the resolver receives live YouTube metadata.
 const heldouts=[

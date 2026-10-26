@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {chromium} from 'playwright';import {build} from 'esbuild';import assert from 'node:assert/strict';import {writeFile,mkdir} from 'node:fs/promises';
 const bundle=await build({stdin:{contents:"import {readMetadata} from './src/recognition/YouTubeMetadataRecognizer';window.readLyricsMetadata=readMetadata;",resolveDir:process.cwd()},bundle:true,write:false,format:'iife'});
 const b=await chromium.launch({executablePath:chromium.executablePath(),headless:true});const results=[];

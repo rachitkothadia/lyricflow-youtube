@@ -17,6 +17,12 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 
 **Timing is source-dependent.** Genius usually supplies plain text. When no matching timestamps exist, lyrics remain readable without fabricated timing. Generated Romanization is labeled and is not a translation.
 
+## Quick install
+
+Download and extract the extension ZIP from [Releases](https://github.com/rachitkothadia/lyricflow-youtube/releases/latest). Open your browser's Extensions page, enable Developer mode, choose **Load unpacked**, and select the extracted `dist` folder. Keep the extracted files in place.
+
+LRCLIB works without Node.js. Genius fallback needs Node.js and the included local reader: on macOS, run `Install Genius Reader.command`; on Linux, run `node scripts/install-native.mjs` from the extracted folder. Reload YouTube after installation.
+
 ## Install from source
 
 Requirements: Node.js 22 or newer, npm, and a current Chromium-based desktop browser. Development checks currently use Chromium and Opera GX on macOS.
@@ -58,11 +64,13 @@ npm run test:browser
 npm run test:lifecycle
 npm run test:product
 npm run test:fullscreen
+npm run test:playlist
+npm run test:controls
 ```
 
 Install test Chromium with `npx playwright install chromium`. Live provider checks require network access and, for Genius, the local reader. See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), and [provider behavior](docs/PROVIDER_COMPLIANCE.md) for tested scope and limitations.
 
-This is an actively maintained extension. Provider availability, incorrect community metadata and timing, and recent songs without timestamps can affect results. Loading errors, manual Genius links, playlist placement and timing controls are currently receiving additional regression coverage.
+This is an actively maintained extension. Provider availability, incorrect community metadata and timing, and recent songs without timestamps can affect results. The latest fixes cover playlist priority, shared Genius links, decimal delay entry and recovery from partial provider failures.
 
 ## Privacy and permissions
 

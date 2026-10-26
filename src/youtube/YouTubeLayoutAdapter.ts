@@ -11,7 +11,10 @@ export class YouTubeLayoutAdapter {
     this.root.attachShadow({ mode: "open" });
   }
   mount() {
-    this.fullscreen = new FullscreenLyrics(this.root, () => { this.reconcile(); this.changed(); });
+    this.fullscreen = new FullscreenLyrics(this.root, () => {
+      this.reconcile();
+      this.changed();
+    });
     this.reconcile();
     const target = document.querySelector("ytd-app") || document.body;
     this.observer = new MutationObserver((records) => {
@@ -46,7 +49,11 @@ export class YouTubeLayoutAdapter {
     }
     const existing = document.getElementById(this.root.id);
     if (existing && existing !== this.root) existing.remove();
-    if (this.root.parentElement !== container || container.firstElementChild !== this.root) container.prepend(this.root);
+    if (
+      this.root.parentElement !== container ||
+      container.firstElementChild !== this.root
+    )
+      container.prepend(this.root);
     return true;
   }
   dispose() {

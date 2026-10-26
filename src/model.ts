@@ -60,7 +60,8 @@ export function normalize(text: string): string {
 }
 export function safeGeniusUrl(value: unknown): string {
   if (typeof value !== "string") throw new Error("Missing Genius source link.");
-  const u = new URL(value);
+  const u = new URL(value.trim());
+  if (u.hostname === "www.genius.com") u.hostname = "genius.com";
   if (
     u.protocol !== "https:" ||
     u.hostname !== "genius.com" ||
@@ -69,5 +70,10 @@ export function safeGeniusUrl(value: unknown): string {
     u.port
   )
     throw new Error("Use an https://genius.com source link.");
+  if (/^\/[a-z\d%'-]+-lyrics\/?$/i.test(u.pathname)) {
+    u.pathname = u.pathname.replace(/\/$/, "");
+    u.search = "";
+    u.hash = "";
+  }
   return u.href;
 }

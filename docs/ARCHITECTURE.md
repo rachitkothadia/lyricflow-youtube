@@ -1,4 +1,4 @@
-# Architecture — 0.5
+# Architecture — 0.6
 
 `matching/identity.ts` supplies bounded identity hypotheses, creator-credit parsing, title normalization, search plans and match evidence to both lyric providers. Metadata keeps raw title/channel and all explicitly named performers. Genius preserves structured co-primary/featured credits; LRCLIB serialized credits use the same identity checks. Queries find candidates; separate strict evidence gates decide automatic selection. An identity key includes complete credits so updated metadata triggers a fresh lookup. No song-specific catalogue or lyrics are bundled.
 
@@ -20,3 +20,5 @@ UI uses native keyboard-accessible controls, normal-flow placement, reduced-moti
 `FullscreenLyrics` moves the existing Shadow DOM host into the current fullscreen player, reserves a bounded video area with scoped temporary CSS, and exposes a pointer-captured/keyboard-accessible divider and hide/show control. Fullscreen exit, navigation and disposal remove player attributes/styles and restore regular placement. Resize does not reload lyrics or replace the video.
 
 Timed lines are native buttons. Their callback adds the current offset to the source timestamp, clamps into actual media seekable ranges (or finite recording duration), seeks and resumes playback/following. Untimed text stays non-interactive. The synchronizer tolerates browser microsecond rounding at timestamp boundaries. Delay input is clamped and rounded to tenths; no timestamps are fabricated or rewritten.
+
+Playlist priority is enforced in the outer sidebar on every layout reconciliation, including late insertions and container replacement. Manual Genius links use page-derived identity after fixed-origin URL normalization; automatic matching stays strict. Delay editing separates live application from committed formatting. Optional provider failures preserve useful existing results, while query-specific overload and explicit global rate limits have different recovery behavior.

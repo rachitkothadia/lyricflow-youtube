@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import {installNative} from './install-native.mjs';
 import {chromium} from 'playwright';import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';
 const profile=await mkdtemp(path.join(tmpdir(),'lyricflow-audio-'));

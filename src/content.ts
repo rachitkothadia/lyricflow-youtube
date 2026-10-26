@@ -8,7 +8,10 @@ import {
 import { LrclibProvider, recordLyrics } from "./lyrics/LrclibProvider";
 import { romanizeLines } from "./lyrics/romanize";
 import { LyricsPanel } from "./ui/LyricsPanel";
-import { PlaybackSynchronizer, lyricSeekTime } from "./timing/PlaybackSynchronizer";
+import {
+  PlaybackSynchronizer,
+  lyricSeekTime,
+} from "./timing/PlaybackSynchronizer";
 import { parseImport } from "./lyrics/parse";
 import { demo } from "./fixtures";
 import { Candidate, Lyrics, Song, normalize } from "./model";
@@ -154,16 +157,18 @@ export function start() {
     );
   }
   panel.onGenius = async (url) => {
-    if (!current) return;
     automatic = false;
-    const song = current;
+    const song = current || { artist: "", title: "Genius lyrics", version: "" };
     reset();
     panel.state("loading", song);
     const seq = generation;
     try {
       const result = await rpc("GENIUS_PAGE", { url, song }, request.signal);
-      if (seq === generation)
-        await prepare(readGeniusPage(result.html, result.url, song), seq);
+      if (seq === generation) {
+        const data = readGeniusPage(result.html, result.url, song, true);
+        current = data.song;
+        await prepare(data, seq);
+      }
     } catch (e) {
       if (seq === generation)
         panel.state(
@@ -210,8 +215,12 @@ export function start() {
     sync?.setOffset(v);
   };
   panel.onSeek = (time) => {
-    if (!video || !loaded?.lines.every(line => line.time !== undefined)) return;
-    const ranges = Array.from({length: video.seekable.length}, (_, i) => ({start: video!.seekable.start(i), end: video!.seekable.end(i)}));
+    if (!video || !loaded?.lines.every((line) => line.time !== undefined))
+      return;
+    const ranges = Array.from({ length: video.seekable.length }, (_, i) => ({
+      start: video!.seekable.start(i),
+      end: video!.seekable.end(i),
+    }));
     const target = lyricSeekTime(time, offset, video.duration, ranges);
     if (target === null) return;
     video.currentTime = target;

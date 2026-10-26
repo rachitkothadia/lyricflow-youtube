@@ -84,7 +84,11 @@ export class LyricsPanel {
       passive: true,
     });
     this.viewport.addEventListener("keydown", (event) => {
-      if (event.target instanceof HTMLButtonElement && [" ", "Enter"].includes(event.key)) return;
+      if (
+        event.target instanceof HTMLButtonElement &&
+        [" ", "Enter"].includes(event.key)
+      )
+        return;
       if (
         [
           "ArrowDown",
@@ -187,16 +191,38 @@ export class LyricsPanel {
       this.onOffset(rounded);
     };
     offset.oninput = () => {
-      if (Number.isFinite(offset.valueAsNumber)) setOffset(offset.valueAsNumber);
+      if (Number.isFinite(offset.valueAsNumber)) {
+        const value = Math.max(
+          -10,
+          Math.min(10, Math.round(offset.valueAsNumber * 10) / 10),
+        );
+        this.onOffset(value);
+      }
     };
-    offset.onchange = () => setOffset(Number.isFinite(offset.valueAsNumber) ? offset.valueAsNumber : 0);
+    offset.onchange = () =>
+      setOffset(
+        Number.isFinite(offset.valueAsNumber) ? offset.valueAsNumber : 0,
+      );
     const stepper = el("div", undefined, "timing-stepper");
-    const earlier = this.button("−0.1", () => setOffset(Number(offset.value) - .1));
+    const earlier = this.button("−0.1", () =>
+      setOffset(Number(offset.value) - 0.1),
+    );
     earlier.setAttribute("aria-label", "Lyrics earlier by 0.1 seconds");
-    const later = this.button("+0.1", () => setOffset(Number(offset.value) + .1));
+    const later = this.button("+0.1", () =>
+      setOffset(Number(offset.value) + 0.1),
+    );
     later.setAttribute("aria-label", "Lyrics later by 0.1 seconds");
-    stepper.append(earlier, offset, later, this.button("Reset", () => setOffset(0)));
-    const offsetHint = el("p", "Positive delays lyrics; negative brings them earlier. Applies to this song.", "timing-hint");
+    stepper.append(
+      earlier,
+      offset,
+      later,
+      this.button("Reset", () => setOffset(0)),
+    );
+    const offsetHint = el(
+      "p",
+      "Positive delays lyrics; negative brings them earlier. Applies to this song.",
+      "timing-hint",
+    );
     const source = el("input");
     source.type = "url";
     source.placeholder = "https://genius.com/Artist-song-lyrics";
@@ -206,6 +232,12 @@ export class LyricsPanel {
       this.settings.open = false;
       this.onGenius(source.value);
     });
+    source.onkeydown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        useSource.click();
+      }
+    };
     const advanced = el("details");
     advanced.append(el("summary", "More settings"));
     const file = el("input");
@@ -351,7 +383,9 @@ export class LyricsPanel {
   lyrics(data: Lyrics) {
     this.state("ready", data.song);
     const timed = data.lines.every((l) => l.time !== undefined);
-    for (const control of this.menu.querySelectorAll<HTMLInputElement | HTMLButtonElement>(".timing-stepper input,.timing-stepper button")) {
+    for (const control of this.menu.querySelectorAll<
+      HTMLInputElement | HTMLButtonElement
+    >(".timing-stepper input,.timing-stepper button")) {
       control.disabled = !timed;
       control.title = timed ? "" : "This source has no line timestamps";
     }
@@ -380,7 +414,9 @@ export class LyricsPanel {
       this.info.append(a);
     }
     for (const line of data.lines) {
-      const p = timed ? el("button", line.text, "line") : el("p", line.text, "line");
+      const p = timed
+        ? el("button", line.text, "line")
+        : el("p", line.text, "line");
       if (p instanceof HTMLButtonElement) {
         p.type = "button";
         p.title = `Play from ${Math.floor(line.time! / 60)}:${(line.time! % 60).toFixed(1).padStart(4, "0")}`;

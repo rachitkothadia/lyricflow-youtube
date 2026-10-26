@@ -1,4 +1,4 @@
-# Active providers — 0.5
+# Active providers — 0.6
 
 LRCLIB supplies live lyrics and timestamps where available. The public Genius website is a fallback for missing tracks; its ordinary search endpoint and lyric page are read on demand. This is public website access, not a licensed complete-text API or a universal catalogue entitlement. No copyrighted lyric corpus is shipped or retained.
 

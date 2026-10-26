@@ -1,3 +1,4 @@
+import "./qa-output.mjs";
 import { chromium } from "playwright";
 import { build } from "esbuild";
 import { readFile, writeFile } from "node:fs/promises";
