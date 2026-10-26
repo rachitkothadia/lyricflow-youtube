@@ -1,0 +1,12 @@
+import {installNative} from './install-native.mjs';import {chromium} from 'playwright';import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
+const profile=await mkdtemp(path.join(tmpdir(),'lyricflow-reported-'));await installNative(profile);const c=await chromium.launchPersistentContext(profile,{executablePath:chromium.executablePath(),headless:true,ignoreDefaultArgs:['--disable-extensions'],viewport:{width:1440,height:1000},args:[`--disable-extensions-except=${path.resolve('dist')}`,`--load-extension=${path.resolve('dist')}`]});const results=[];
+try{
+ const page=await c.newPage();await page.addInitScript(()=>{const inject=()=>{for(const title of document.querySelectorAll('ytd-watch-metadata h1 yt-formatted-string'))if(!title.querySelector('.sponsorBlockCategoryPill')){const pill=document.createElement('button');pill.className='sponsorBlockCategoryPill';pill.textContent='Sponsor';pill.style.display='none';title.prepend(pill);}};new MutationObserver(inject).observe(document,{childList:true,subtree:true});inject();});
+ for(const [name,id]of [['Underpressure','bkshVU8FN4Q'],['101','HTOWi0S3rjM'],['Baby','kffacxfA7G4'],['Not Like Us','H58vbez_m4E']]){
+  await page.goto('https://www.youtube.com/watch?v='+id,{waitUntil:'domcontentloaded',timeout:60000});await page.locator('#lyricflow-root').waitFor({timeout:25000});
+  await page.waitForFunction(()=>{const s=document.querySelector('#lyricflow-root').shadowRoot;return s.querySelector('.line,.candidate,.message');},undefined,{timeout:45000});
+  const data=await page.locator('#lyricflow-root').evaluate(root=>{const s=root.shadowRoot;return {title:s.querySelector('h2').textContent,lines:s.querySelectorAll('.line').length,candidates:s.querySelectorAll('.candidate').length,message:s.querySelector('.message')?.textContent,source:s.querySelector('.source')?.href,rawTitle:document.querySelector('ytd-watch-metadata h1')?.textContent.trim()};});
+  results.push({name,id,...data});console.log(JSON.stringify(results.at(-1)));assert.ok(data.lines>10,name+': '+JSON.stringify(data));assert.ok(!data.title.startsWith('Sponsor'),name);
+ }
+ await mkdir('output/fixes',{recursive:true});await writeFile('output/fixes/reported-songs.json',JSON.stringify({passed:results.length,scope:'Actual YouTube videos with injected SponsorBlock-style controls and live providers',results},null,2));
+}finally{await c.close();await rm(profile,{recursive:true,force:true});}

@@ -1,0 +1,31 @@
+import {chromium} from 'playwright';import {build} from 'esbuild';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';import assert from 'node:assert/strict';
+const bundle=await build({stdin:{contents:"import {start} from './src/content';window.app=start();",resolveDir:process.cwd()},alias:{path:new URL('../src/lyrics/browserPath.ts',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'chrome120'});
+const browser=await chromium.launch({executablePath:chromium.executablePath(),headless:true});
+const checks=[];const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);console.log('PASS',name);};
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ const html=(await readFile('fixtures/watch.html','utf8')).replace('<script src="/content.js"></script>','');
+ await page.route('https://fixture.test/**',r=>r.fulfill({contentType:'text/html',body:html}));
+ await page.goto('https://fixture.test/watch?v=playlist');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await page.getByLabel('Lyrics options',{exact:true}).click();await page.getByText('More settings',{exact:true}).click();await page.getByRole('button',{name:'Try synthetic demo',exact:true}).click();
+ const root=page.locator('#lyricflow-root');
+ await page.evaluate(()=>{window.originalPanel=document.querySelector('#lyricflow-root');const sidebar=document.querySelector('#secondary');sidebar.style.display='flex';sidebar.style.flexDirection='column';const playlist=document.createElement('div');playlist.id='test-playlist';playlist.textContent='Playlist';playlist.style.cssText='height:160px;flex:none;order:-5';sidebar.prepend(playlist);});
+ await page.waitForFunction(()=>document.querySelector('#secondary').firstElementChild?.id==='lyricflow-root');
+ check('lyrics precede an outer playlist with negative flex order',await root.evaluate(e=>e.getBoundingClientRect().bottom<=document.querySelector('#test-playlist').getBoundingClientRect().top+1));
+ await page.evaluate(()=>{const inner=document.querySelector('#secondary-inner'),module=document.createElement('div');module.id='inner-playlist';module.textContent='Inner playlist';module.style.height='100px';inner.prepend(module);});
+ check('lyrics also precede playlist modules nested in the inner sidebar',await root.evaluate(e=>e.getBoundingClientRect().bottom<=document.querySelector('#inner-playlist').getBoundingClientRect().top+1));
+ await page.evaluate(()=>{document.querySelector('#secondary').prepend(document.querySelector('#test-playlist'));});
+ await page.waitForFunction(()=>document.querySelector('#secondary').firstElementChild===window.originalPanel);
+ check('late YouTube reordering restores top placement',await root.evaluate(e=>e===window.originalPanel&&e.parentElement.firstElementChild===e));
+ check('reordering preserves loaded lyrics',await page.locator('.line').count()===10);
+ await page.evaluate(()=>{const old=document.querySelector('#secondary'),next=document.createElement('aside');next.id='secondary';next.innerHTML='<div id="secondary-inner"><div id="replacement-playlist" style="height:100px">Replacement playlist</div></div>';old.replaceWith(next);});
+ await page.waitForFunction(()=>document.querySelector('#secondary').firstElementChild===window.originalPanel);
+ check('replacing the entire sidebar preserves the same panel',await root.evaluate(e=>e===window.originalPanel));
+ await page.evaluate(()=>document.querySelector('#secondary-inner').remove());
+ check('removing the inner sidebar never removes the lyrics',await root.count()===1);
+ check('normal lyrics stay in flow without covering the player',await root.evaluate(e=>getComputedStyle(e).position==='static'));
+ await page.evaluate(()=>window.app.dispose());
+ check('disposal removes the panel',await root.count()===0);
+ await mkdir('output/playlist',{recursive:true});await writeFile('output/playlist/results.json',JSON.stringify({passed:checks.length,checks},null,2));
+}finally{await browser.close();}

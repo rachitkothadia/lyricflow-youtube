@@ -1,0 +1,12 @@
+node_modules/
+dist/
+graphify-out/
+output/
+.env*
+.DS_Store
+*.zip
+*.crx
+*.pem
+*.log
+.codex/
+coverage/

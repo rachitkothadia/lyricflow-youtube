@@ -1,0 +1,42 @@
+{
+  "name": "lyricflow",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "node scripts/browser-qa.mjs",
+    "dev": "node scripts/serve.mjs",
+    "test:lifecycle": "node scripts/lifecycle-qa.mjs",
+    "test:live-layout": "node scripts/live-layout-qa.mjs",
+    "test:providers": "node scripts/live-provider-qa.mjs",
+    "test:product": "node scripts/product-qa.mjs",
+    "test:genius": "node scripts/live-genius-qa.mjs",
+    "install:reader": "node scripts/install-native.mjs",
+    "test:metadata": "node scripts/metadata-dom-qa.mjs",
+    "test:identity": "tsx --test tests/identity.test.ts",
+    "test:fullscreen": "node scripts/fullscreen-qa.mjs",
+    "test:fullscreen-live": "node scripts/fullscreen-live-qa.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.0",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "playwright": "^1.56.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@indic-transliteration/sanscript": "^1.3.3",
+    "koroman": "^1.0.16",
+    "kuromoji": "^0.1.2",
+    "kuroshiro": "^1.2.1",
+    "kuroshiro-analyzer-kuromoji": "^1.1.0",
+    "pinyin-pro": "^3.29.5"
+  },
+  "overrides": {
+    "toml": "5.0.1"
+  },
+  "license": "MIT"
+}
