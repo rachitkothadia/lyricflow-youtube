@@ -5,6 +5,7 @@ import {
   identityKey,
   hypotheses,
   searchQueries,
+  cleanTitle,
 } from "../matching/identity";
 import {
   Candidate,
@@ -147,6 +148,7 @@ function similarity(a: string, b: string) {
 export function rankRecords(song: Song, records: LrclibRecord[]): Candidate[] {
   return records
     .map((r) => {
+      const identity = recordIdentity(r);
       const version = recordingVersion(r.trackName + " " + r.albumName);
       const delta =
         song.duration && r.duration
@@ -154,20 +156,17 @@ export function rankRecords(song: Song, records: LrclibRecord[]): Candidate[] {
           : undefined;
       const latin = isLatin(r.syncedLyrics || r.plainLyrics || "");
       const score =
-        0.58 *
-          evidence(song, { title: r.trackName, artist: r.artistName, version })
-            .title +
-        0.3 *
-          evidence(song, { title: r.trackName, artist: r.artistName, version })
-            .artist +
+        0.58 * evidence(song, identity).title +
+        0.3 * evidence(song, identity).artist +
         0.08 * (delta === undefined ? 0.5 : Math.max(0, 1 - delta / 20)) +
         0.02 * Number(!!r.syncedLyrics) +
         0.02 * Number(latin) -
         (version !== song.version ? 0.4 : 0);
       return {
         id: r.id,
-        title: r.trackName,
-        artist: r.artistName,
+        title: identity.title,
+        artist: identity.artist,
+        ...(identity.artists ? { artists: identity.artists } : {}),
         version,
         duration: r.duration,
         romanized: latin,
@@ -175,9 +174,29 @@ export function rankRecords(song: Song, records: LrclibRecord[]): Candidate[] {
         provider: "lrclib" as const,
         score,
         album: r.albumName,
+        timed: hasVerifiedTiming(r),
       };
     })
     .sort((a, b) => b.score! - a.score! || a.id - b.id);
+}
+export function recordIdentity(record: LrclibRecord): Song {
+  const featured = record.trackName.match(
+    /\s*[(\[]\s*(?:feat|ft|featuring)\.?\s+([^\])]+)[\])]/i,
+  );
+  const title = cleanTitle(
+    record.trackName
+      .replace(/\s*[(\[]\s*(?:feat|ft|featuring)\.?\s+[^\])]+[\])]/gi, "")
+      .replace(/\s*[(\[](?:paused|playing)[\])]\s*$/i, ""),
+  );
+  return {
+    title,
+    artist: record.artistName,
+    version: recordingVersion(record.trackName + " " + record.albumName),
+    duration: record.duration,
+    ...(featured
+      ? { artists: [record.artistName, ...artistCredits(featured[1])] }
+      : {}),
+  };
 }
 export function chooseRecord(
   song: Song,
@@ -186,7 +205,13 @@ export function chooseRecord(
   const timed = records.filter(hasVerifiedTiming);
   const preferred = selectRecord(song, timed);
   if (preferred && evidence(song, preferred).duration) return preferred;
-  return selectRecord(song, records);
+  const selected = selectRecord(song, records);
+  if (selected?.timed && !evidence(song, selected).duration)
+    return selectRecord(
+      song,
+      records.filter((r) => !hasVerifiedTiming(r)),
+    );
+  return selected;
 }
 function hasVerifiedTiming(record: LrclibRecord): boolean {
   if (!record.syncedLyrics || record.instrumental) return false;
@@ -241,12 +266,7 @@ export function recordLyrics(record: LrclibRecord): Lyrics {
   )
     throw new ProviderError("invalid-response", "Invalid lyrics response.");
   return {
-    song: {
-      title: record.trackName,
-      artist: record.artistName,
-      version: recordingVersion(record.trackName + " " + record.albumName),
-      duration: record.duration,
-    },
+    song: recordIdentity(record),
     lines,
     sourceUrl: `https://lrclib.net/api/get/${record.id}`,
     sourceLabel: "LRCLIB",
@@ -412,8 +432,27 @@ export class LrclibProvider {
       for (const record of await this.search(hint, signal))
         found.set(record.id, record);
       const chosen = chooseRecord(song, [...found.values()]);
-      if (chosen)
-        return { kind: "ready", lyrics: await this.getById(chosen.id, signal) };
+      if (chosen) {
+        const lyrics = await this.getById(chosen.id, signal);
+        if (!lyrics.lines.every((l) => l.time !== undefined)) {
+          const reference = { ...song, duration: undefined };
+          lyrics.timingCandidates = rankRecords(
+            reference,
+            [...found.values()].filter(hasVerifiedTiming),
+          )
+            .filter((c) => {
+              const m = evidence(reference, c);
+              return (
+                c.score! >= 0.88 &&
+                m.title >= 0.9 &&
+                m.artist === 1 &&
+                m.version
+              );
+            })
+            .slice(0, 3);
+        }
+        return { kind: "ready", lyrics };
+      }
     }
     const records = [...found.values()];
     if (records.length) {

@@ -1,8 +1,14 @@
-# Architecture — 0.6
+# Architecture — 0.7
 
 `matching/identity.ts` supplies bounded identity hypotheses, creator-credit parsing, title normalization, search plans and match evidence to both lyric providers. Metadata keeps raw title/channel and all explicitly named performers. Genius preserves structured co-primary/featured credits; LRCLIB serialized credits use the same identity checks. Queries find candidates; separate strict evidence gates decide automatic selection. An identity key includes complete credits so updated metadata triggers a fresh lookup. No song-specific catalogue or lyrics are bundled.
 
-Metadata → LRCLIB → Genius fallback through a fixed-origin native reader → inert HTML parser → local Romanization → compact Shadow DOM panel. Genius source URLs can also be supplied in options. Channel identity resolves song-first video titles. The existing direct LRCLIB timing pipeline remains unchanged.
+Metadata → LRCLIB → Genius fallback through a fixed-origin native reader → inert HTML parser → local Romanization → compact Shadow DOM panel. Genius source URLs can also be supplied in options. Channel identity resolves song-first video titles. Explicit feature credits embedded in LRCLIB titles are retained as artist evidence; terminal player-status suffixes are normalized without stripping recording versions.
+
+The watch player's media clock takes priority over preview videos. Metadata waits briefly for its duration, then reselects an edition when real duration becomes available or changes materially. Advertisement durations and playback are excluded. Safe same-duration source timestamps take priority; different-length timing stays an explicit candidate. Untimed provider text can acquire source timestamps only when all lyric lines align.
+
+Synchronization uses `video.currentTime - (recordingAlignment + fineDelay)`; seeking uses the inverse. Matching a currently heard line sets the recording alignment without seeking. Fine delay stays within ±10 seconds. Background-only storage RPCs validate and serialize local profiles, capped at 100, keyed by video ID plus a hash of source URL, recording duration, words and source timestamps. Navigation and generation guards reject stale profile/caption/provider replies.
+
+Optional caption recovery reuses the current video's observed same-origin timedtext request. JSON3 cue/word offsets are source timestamps. Full normalized text must match, and every lyric start must have an actual caption boundary; no missing boundaries are interpolated. Original lyric text and attribution remain, with a separate timing source link. Caption state is restored on completion or cancellation. This path has deterministic browser coverage; actual caption availability remains upstream-dependent.
 
 Chrome native messaging starts one local Node process per Genius request. No server runs in the background. The registered host accepts only the extension origin and read-only public Genius search/song URLs; it has bounded frames, payloads and timeouts. The stable public manifest key preserves the packaged extension identity across folders.
 

@@ -51,9 +51,16 @@ export function alignLyrics(
     );
   return {
     confidence,
-    lines: lyrics.map(({ time, ...l }, k) => ({
+    lines: lyrics.map(({ time, endTime, ...l }, k) => ({
       ...l,
-      ...(valid ? { time: timed[matches.get(k)!].time } : {}),
+      ...(valid
+        ? {
+            time: timed[matches.get(k)!].time,
+            ...(timed[matches.get(k)!].endTime !== undefined
+              ? { endTime: timed[matches.get(k)!].endTime }
+              : {}),
+          }
+        : {}),
     })),
   };
 }

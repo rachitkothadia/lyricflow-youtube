@@ -1,12 +1,30 @@
 import { LyricLine } from "../model";
+import { playingAd } from "../youtube/media";
 /** Inverse of highlight time, bounded to the recording's actual seekable ranges. */
-export function lyricSeekTime(time: number, offset: number, duration: number, ranges: Array<{start: number; end: number}>): number | null {
+export function lyricSeekTime(
+  time: number,
+  offset: number,
+  duration: number,
+  ranges: Array<{ start: number; end: number }>,
+): number | null {
   if (!Number.isFinite(time) || !Number.isFinite(offset)) return null;
-  const valid = ranges.filter(r => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start);
-  if (!valid.length && Number.isFinite(duration) && duration > 0) valid.push({start: 0, end: duration});
+  const valid = ranges.filter(
+    (r) =>
+      Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start,
+  );
+  if (!valid.length && Number.isFinite(duration) && duration > 0)
+    valid.push({ start: 0, end: duration });
   const target = time + offset;
-  const candidates = valid.map(r => Math.max(r.start, Math.min(r.end - Math.min(.01, (r.end - r.start) / 2), target)));
-  return candidates.sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0] ?? null;
+  const candidates = valid.map((r) =>
+    Math.max(
+      r.start,
+      Math.min(r.end - Math.min(0.01, (r.end - r.start) / 2), target),
+    ),
+  );
+  return (
+    candidates.sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0] ??
+    null
+  );
 }
 export function activeLine(
   lines: LyricLine[],
@@ -24,7 +42,7 @@ export function activeLine(
     hi = lines.length - 1,
     result = -1;
   // Browsers can round a seek down by a microsecond. Keep exact lyric seeks on that line.
-  const alignedTime = time + .00001;
+  const alignedTime = time + 0.00001;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     if (lines[mid].time! <= alignedTime) {
@@ -32,7 +50,11 @@ export function activeLine(
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  return result >= 0 && lines[result].endTime !== undefined && alignedTime >= lines[result].endTime! ? -1 : result;
+  return result >= 0 &&
+    lines[result].endTime !== undefined &&
+    alignedTime >= lines[result].endTime!
+    ? -1
+    : result;
 }
 export class PlaybackSynchronizer {
   private frame = 0;
@@ -62,7 +84,7 @@ export class PlaybackSynchronizer {
     const index = activeLine(
       this.lines,
       this.video.currentTime - this.offset,
-      this.video.ended,
+      this.video.ended || playingAd(this.video),
     );
     if (index !== this.last) {
       this.last = index;

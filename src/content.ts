@@ -15,6 +15,19 @@ import {
 import { parseImport } from "./lyrics/parse";
 import { demo } from "./fixtures";
 import { Candidate, Lyrics, Song, normalize } from "./model";
+import {
+  watchVideo as findWatchVideo,
+  playingAd,
+  recordingDuration,
+} from "./youtube/media";
+import {
+  timingKey,
+  validCorrection,
+  calibrationOffset,
+} from "./timing/preferences";
+import { artistCredits } from "./matching/identity";
+import { alignLyrics } from "./lyrics/LyricsMatcher";
+import { videoCaptions, alignCaptionTiming } from "./timing/YouTubeCaptions";
 export function start() {
   let disposed = false,
     automatic = true,
@@ -25,7 +38,18 @@ export function start() {
     generation = 0,
     current: Song | null = null,
     loaded: Lyrics | undefined,
-    offset = 0;
+    offset = 0,
+    alignment = 0,
+    correctionKey = "",
+    adjustmentRevision = 0;
+  let captionRequest: AbortController | undefined;
+  let observedVideo: HTMLVideoElement | null = null;
+  let observedPlayer: Element | null = null;
+  let playerObserver: MutationObserver | undefined;
+  let mediaTimer: ReturnType<typeof setTimeout> | undefined;
+  let durationWait: ReturnType<typeof setTimeout> | undefined;
+  let durationWaitExpired = false;
+  const timingLookups = new Set<string>();
   const layout = new YouTubeLayoutAdapter(reconcile);
   const panel = new LyricsPanel(layout.root.shadowRoot!);
   const provider = new LrclibProvider();
@@ -37,6 +61,8 @@ export function start() {
       if (result?.error) throw new Error(result.error);
       return result;
     }
+    if (type === "TIMING_LOAD") return { profile: null };
+    if (type === "TIMING_SAVE") return { ok: true };
     if (type === "LYRICS_GET")
       return {
         kind: "ready",
@@ -45,8 +71,20 @@ export function start() {
     return provider.resolve((payload as { song: Song }).song, signal);
   }
   async function prepare(data: Lyrics, seq: number) {
+    const nextKey = timingKey(key, data, recordingDuration(video)),
+      revision = adjustmentRevision;
+    let saved: any;
+    if (nextKey)
+      try {
+        saved = await rpc("TIMING_LOAD", { key: nextKey }, request.signal);
+      } catch {}
     const result = await romanizeLines(data.lines, { language });
     if (disposed || seq !== generation) return;
+    correctionKey = nextKey;
+    if (revision === adjustmentRevision && validCorrection(saved?.profile)) {
+      alignment = saved.profile.base;
+      offset = saved.profile.fine;
+    }
     original = data;
     bind({
       ...data,
@@ -55,9 +93,129 @@ export function start() {
       romanization: result.mode,
       romanizationSystems: [...result.systems, ...result.unsupported],
     });
+    panel.timingCorrection(alignment, offset, true);
+    const lookupKey = key + ":" + data.sourceUrl;
+    if (
+      (data.provenance === "genius" || data.provenance === "lrclib") &&
+      data.lines.every((l) => l.time === undefined) &&
+      !timingLookups.has(lookupKey)
+    ) {
+      timingLookups.add(lookupKey);
+      void recoverTiming(data, result.lines, seq);
+    }
+  }
+  async function recoverTiming(
+    data: Lyrics,
+    readable: Lyrics["lines"],
+    seq: number,
+  ) {
+    try {
+      const primary =
+        (data.song.artists || artistCredits(data.song.artist))[0] ||
+        data.song.artist;
+      const song = {
+        ...data.song,
+        artist: primary,
+        artists: [primary],
+        duration: recordingDuration(video),
+      };
+      const found = await rpc("TIMING_FIND", { song }, request.signal);
+      if (disposed || seq !== generation) return;
+      if (found.kind === "ready") {
+        if (found.lyrics.lines.every((l: any) => l.time !== undefined)) {
+          const converted = await romanizeLines(found.lyrics.lines, {
+            language,
+          });
+          if (disposed || seq !== generation) return;
+          const aligned = alignLyrics(readable, converted.lines);
+          if (aligned.lines.every((l) => l.time !== undefined)) {
+            await prepare(
+              {
+                ...data,
+                lines: data.lines.map((l, i) => ({
+                  ...l,
+                  time: aligned.lines[i].time,
+                  ...(aligned.lines[i].endTime !== undefined
+                    ? { endTime: aligned.lines[i].endTime }
+                    : {}),
+                })),
+                timingSource: {
+                  url: found.lyrics.sourceUrl,
+                  label: "LRCLIB · matching lyric lines",
+                },
+              },
+              seq,
+            );
+            return;
+          }
+          const id = Number(
+            new URL(found.lyrics.sourceUrl).pathname.split("/").at(-1),
+          );
+          if (Number.isSafeInteger(id) && id > 0)
+            panel.setTimingCandidates([
+              {
+                ...found.lyrics.song,
+                id,
+                url: found.lyrics.sourceUrl,
+                provider: "lrclib",
+                romanized: found.lyrics.romanized,
+                timed: true,
+              },
+            ]);
+        } else panel.setTimingCandidates(found.lyrics.timingCandidates || []);
+      } else if (found.kind === "ambiguous")
+        panel.setTimingCandidates(
+          found.candidates.filter((c: Candidate) => c.timed),
+        );
+    } catch {
+      /* Keep readable source text when an optional timing lookup fails. */
+    }
+  }
+  const mediaChanged = () => {
+    clearTimeout(mediaTimer);
+    mediaTimer = setTimeout(() => {
+      sync?.setOffset(alignment + offset);
+      reconcile();
+    }, 100);
+  };
+  function attachVideo(value: HTMLVideoElement | null) {
+    if (observedVideo !== value) {
+      for (const event of ["loadedmetadata", "durationchange", "emptied"])
+        observedVideo?.removeEventListener(event, mediaChanged);
+      observedVideo = value;
+      for (const event of ["loadedmetadata", "durationchange", "emptied"])
+        value?.addEventListener(event, mediaChanged);
+    }
+    const player = value?.closest(".html5-video-player,#movie_player") || null;
+    if (player !== observedPlayer) {
+      playerObserver?.disconnect();
+      observedPlayer = player;
+      if (player) {
+        playerObserver = new MutationObserver(mediaChanged);
+        playerObserver.observe(player, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+      }
+    }
+    video = value;
+  }
+  function saveCorrection() {
+    if (!correctionKey) return;
+    const selectedKey = correctionKey;
+    void rpc(
+      "TIMING_SAVE",
+      { key: selectedKey, profile: { base: alignment, fine: offset } },
+      request.signal,
+    ).catch(() => {
+      if (selectedKey === correctionKey)
+        panel.timingError("Timing applied, but could not save the correction.");
+    });
   }
   function reset() {
     request.abort();
+    captionRequest?.abort();
+    captionRequest = undefined;
     request = new AbortController();
     generation++;
     sync?.dispose();
@@ -65,18 +223,21 @@ export function start() {
     loaded = undefined;
     original = undefined;
     offset = 0;
+    alignment = 0;
+    correctionKey = "";
+    adjustmentRevision++;
     panel.resetOffset();
   }
   function bind(data: Lyrics) {
     loaded = data;
     sync?.dispose();
     panel.lyrics(data);
-    video = document.querySelector("video");
+    attachVideo(findWatchVideo());
     if (video) {
       sync = new PlaybackSynchronizer(video, data.lines, (i) =>
         panel.active(i),
       );
-      sync.setOffset(offset);
+      sync.setOffset(alignment + offset);
     }
   }
   async function load(song: Song, id?: number, candidate?: Candidate) {
@@ -120,6 +281,18 @@ export function start() {
   async function select(candidate: Candidate) {
     automatic = false;
     await load(candidate, candidate.id, candidate);
+    const duration = recordingDuration(video);
+    if (
+      loaded &&
+      candidate.timed &&
+      duration &&
+      candidate.duration &&
+      Math.abs(duration - candidate.duration) > 8 &&
+      !alignment
+    )
+      panel.timingError(
+        "Different timed edition · match a line to the music in options.",
+      );
   }
   function reconcile() {
     if (disposed) return;
@@ -130,23 +303,44 @@ export function start() {
     if (newKey !== key) {
       key = newKey;
       automatic = true;
+      clearTimeout(durationWait);
+      durationWait = undefined;
+      durationWaitExpired = false;
       reset();
       current = null;
-      video = document.querySelector("video");
+      attachVideo(findWatchVideo());
       if (!newKey) {
         panel.state("initial");
         return;
       }
       panel.state("detecting");
     }
-    const found = document.querySelector<HTMLVideoElement>("video");
-    if (found !== video) {
-      video = found;
-      if (loaded) bind(loaded);
-    }
+    const found = findWatchVideo();
+    const replaced = found !== video;
+    attachVideo(found);
+    if (replaced && loaded) bind(loaded);
     if (key && automatic) {
+      if (playingAd(video)) return;
       const song = readMetadata();
-      if (song && (!current || identityKey(song) !== identityKey(current))) {
+      if (song && !song.duration && video && !durationWaitExpired) {
+        if (!durationWait) {
+          panel.state("detecting", song);
+          durationWait = setTimeout(() => {
+            durationWaitExpired = true;
+            reconcile();
+          }, 1200);
+        }
+        return;
+      }
+      const changedDuration =
+        song?.duration &&
+        (!current?.duration || Math.abs(song.duration - current.duration) > 1);
+      if (
+        song &&
+        (!current ||
+          identityKey(song) !== identityKey(current) ||
+          changedDuration)
+      ) {
         current = song;
         void load(song);
       }
@@ -211,17 +405,95 @@ export function start() {
     bind(demo);
   };
   panel.onOffset = (v) => {
+    adjustmentRevision++;
     offset = v;
-    sync?.setOffset(v);
+    sync?.setOffset(alignment + offset);
+    panel.timingCorrection(alignment, offset);
+    saveCorrection();
+  };
+  panel.onResetTiming = () => {
+    alignment = 0;
+  };
+  panel.onCalibrate = (time) => {
+    if (!video || playingAd(video)) {
+      panel.timingError("Wait for the song to resume, then align a line.");
+      return;
+    }
+    try {
+      alignment = calibrationOffset(video.currentTime, time);
+      offset = 0;
+      adjustmentRevision++;
+      sync?.setOffset(alignment);
+      panel.timingCorrection(alignment, 0, true);
+      saveCorrection();
+    } catch (error) {
+      panel.timingError(
+        error instanceof Error ? error.message : "Could not align this line.",
+      );
+    }
+  };
+  panel.onVideoTiming = async () => {
+    if (!original || !loaded || !video || playingAd(video)) {
+      panel.timingError("Load the song and wait for playback to resume first.");
+      return;
+    }
+    captionRequest?.abort();
+    const captionsController = new AbortController();
+    captionRequest = captionsController;
+    const seq = ++generation,
+      data = original,
+      readable = loaded.lines;
+    panel.timingError("Checking the video captions for matching timing…");
+    try {
+      const captions = await videoCaptions(
+        key,
+        AbortSignal.any([request.signal, captionsController.signal]),
+      );
+      const converted = await romanizeLines(captions.lines, { language });
+      if (disposed || seq !== generation) return;
+      const timed = alignCaptionTiming(readable, converted.lines);
+      alignment = 0;
+      offset = 0;
+      await prepare(
+        {
+          ...data,
+          lines: data.lines.map((line, i) => ({
+            ...line,
+            time: timed[i].time,
+            endTime: timed[i].endTime,
+          })),
+          timingSource: { url: captions.url, label: captions.label },
+        },
+        seq,
+      );
+    } catch (error) {
+      if (!disposed && seq === generation)
+        panel.timingError(
+          error instanceof Error
+            ? error.message
+            : "No verified video timing is available.",
+        );
+    } finally {
+      if (captionRequest === captionsController) captionRequest = undefined;
+    }
   };
   panel.onSeek = (time) => {
-    if (!video || !loaded?.lines.every((line) => line.time !== undefined))
+    if (
+      !video ||
+      playingAd(video) ||
+      !loaded?.lines.every((line) => line.time !== undefined)
+    )
       return;
     const ranges = Array.from({ length: video.seekable.length }, (_, i) => ({
       start: video!.seekable.start(i),
       end: video!.seekable.end(i),
     }));
-    const target = lyricSeekTime(time, offset, video.duration, ranges);
+    const target = lyricSeekTime(
+      time,
+      alignment + offset,
+      video.duration,
+      ranges,
+    );
     if (target === null) return;
     video.currentTime = target;
     void video.play().catch(() => {});
@@ -242,7 +514,15 @@ export function start() {
       reset();
       automatic = false;
       current = data.song;
-      bind(data);
+      const seq = generation;
+      void prepare(data, seq).catch((error) => {
+        if (!disposed && seq === generation)
+          panel.state(
+            "error",
+            data.song,
+            error instanceof Error ? error.message : "Import failed.",
+          );
+      });
     } catch (e) {
       sync?.dispose();
       sync = undefined;
@@ -273,6 +553,9 @@ export function start() {
     if (typeof chrome !== "undefined" && chrome.runtime?.id)
       chrome.runtime.onMessage.removeListener(audio);
     reset();
+    attachVideo(null);
+    clearTimeout(mediaTimer);
+    clearTimeout(durationWait);
     layout.dispose();
     panel.dispose();
     theme.disconnect();

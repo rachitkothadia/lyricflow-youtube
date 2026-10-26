@@ -1,6 +1,6 @@
 {
   "name": "lyricflow",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,7 +19,9 @@
     "test:fullscreen": "node scripts/fullscreen-qa.mjs",
     "test:fullscreen-live": "node scripts/fullscreen-live-qa.mjs",
     "test:playlist": "node scripts/playlist-qa.mjs",
-    "test:controls": "node scripts/manual-controls-qa.mjs"
+    "test:controls": "node scripts/manual-controls-qa.mjs",
+    "test:sync": "node scripts/sync-qa.mjs",
+    "test:sync-sources": "tsx scripts/sync-sources-qa.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",

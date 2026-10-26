@@ -47,6 +47,10 @@ export class LyricsPanel {
   private activeIndex = -1;
   private color = "auto";
   private song?: Song;
+  private calibrating = false;
+  private calibrationButton = el("button", "Match a line to the music");
+  private timingMessage = el("p", undefined, "timing-state timing-hint");
+  private timingVersions = el("div");
   onLanguage = (_language: string) => {};
   onStopAudio = () => {};
   onRetry = () => {};
@@ -56,6 +60,9 @@ export class LyricsPanel {
   onChoose = (_candidate: Candidate) => {};
   onOffset = (_offset: number) => {};
   onSeek = (_time: number) => {};
+  onCalibrate = (_time: number) => {};
+  onResetTiming = () => {};
+  onVideoTiming = () => {};
   onGenius = (_url: string) => {};
   private resizeObserver?: ResizeObserver;
   private outside = (event: PointerEvent) => {
@@ -216,8 +223,31 @@ export class LyricsPanel {
       earlier,
       offset,
       later,
-      this.button("Reset", () => setOffset(0)),
+      this.button("Reset", () => {
+        this.onResetTiming();
+        setOffset(0);
+      }),
     );
+    this.calibrationButton.type = "button";
+    this.calibrationButton.disabled = true;
+    this.calibrationButton.onclick = () => {
+      this.calibrating = !this.calibrating;
+      this.calibrationButton.textContent = this.calibrating
+        ? "Cancel alignment"
+        : "Match a line to the music";
+      this.status.textContent = this.calibrating
+        ? "Click the lyric you hear right now"
+        : "";
+      this.status.hidden = !this.calibrating;
+      if (this.calibrating) {
+        this.settings.open = false;
+        this.manual = true;
+        clearTimeout(this.resumeTimer);
+        cancelAnimationFrame(this.frame);
+        this.follow.hidden = true;
+      } else this.resume();
+    };
+    this.timingMessage.setAttribute("aria-live", "polite");
     const offsetHint = el(
       "p",
       "Positive delays lyrics; negative brings them earlier. Applies to this song.",
@@ -284,6 +314,13 @@ export class LyricsPanel {
       ol,
       stepper,
       offsetHint,
+      this.calibrationButton,
+      this.timingMessage,
+      this.button("Use matching video captions", () => {
+        this.settings.open = false;
+        this.onVideoTiming();
+      }),
+      this.timingVersions,
       sl,
       useSource,
       advanced,
@@ -309,12 +346,47 @@ export class LyricsPanel {
     const input =
       this.menu.querySelector<HTMLInputElement>("input[type=number]");
     if (input) input.value = "0.0";
+    this.timingMessage.textContent = "";
+    this.calibrating = false;
+    this.calibrationButton.textContent = "Match a line to the music";
+  }
+  timingCorrection(base: number, fine: number, replaceInput = false) {
+    if (replaceInput) {
+      const input =
+        this.menu.querySelector<HTMLInputElement>("input[type=number]");
+      if (input) input.value = fine.toFixed(1);
+    }
+    const total = Math.round((base + fine) * 10) / 10;
+    this.timingMessage.textContent = total
+      ? `Current correction: ${total > 0 ? "+" : ""}${total.toFixed(1)} s${base ? " · aligned to this recording" : ""}`
+      : "No timing correction";
+  }
+  timingError(message: string) {
+    this.status.textContent = message;
+    this.status.hidden = false;
+  }
+  setTimingCandidates(candidates: Candidate[]) {
+    this.timingVersions.replaceChildren();
+    for (const candidate of candidates) {
+      const seconds = candidate.duration || 0;
+      const label = `Load timed edition${seconds ? ` (${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")})` : ""} · align it to this video`;
+      this.timingVersions.append(
+        this.button(label, () => {
+          this.settings.open = false;
+          this.onChoose(candidate);
+        }),
+      );
+    }
   }
   audioStatus(message: string) {
     this.audioMessage.textContent = message;
     this.settings.open = true;
   }
   private pauseFollowing() {
+    if (this.calibrating) {
+      this.manual = true;
+      return;
+    }
     if (this.activeIndex < 0) return;
     this.manual = true;
     this.follow.hidden = false;
@@ -329,6 +401,7 @@ export class LyricsPanel {
     this.scrollActive();
   }
   state(state: PanelState, song?: Song, message?: string) {
+    this.calibrationButton.disabled = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.resumeTimer);
     this.activeIndex = -1;
@@ -383,6 +456,10 @@ export class LyricsPanel {
   lyrics(data: Lyrics) {
     this.state("ready", data.song);
     const timed = data.lines.every((l) => l.time !== undefined);
+    this.calibrating = false;
+    this.calibrationButton.textContent = "Match a line to the music";
+    this.calibrationButton.disabled = !timed;
+    this.setTimingCandidates(data.timingCandidates || []);
     for (const control of this.menu.querySelectorAll<
       HTMLInputElement | HTMLButtonElement
     >(".timing-stepper input,.timing-stepper button")) {
@@ -404,6 +481,13 @@ export class LyricsPanel {
         `${label} · ${timed ? "Synchronized" : "No line timestamps"}${data.romanization === "generated" ? " · generated Romanization" : ""}`,
       ),
     );
+    if (data.timingSource) {
+      const a = el("a", `Timing: ${data.timingSource.label}`, "timing-source");
+      a.href = data.timingSource.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      this.info.append(a);
+    }
     if (data.romanizationSystems?.length)
       this.info.append(el("p", data.romanizationSystems.join(" · ")));
     if (data.provenance !== "synthetic") {
@@ -422,7 +506,12 @@ export class LyricsPanel {
         p.title = `Play from ${Math.floor(line.time! / 60)}:${(line.time! % 60).toFixed(1).padStart(4, "0")}`;
         p.onclick = () => {
           this.settings.open = false;
-          this.onSeek(line.time!);
+          if (this.calibrating) {
+            this.calibrating = false;
+            this.calibrationButton.textContent = "Match a line to the music";
+            this.status.hidden = true;
+            this.onCalibrate(line.time!);
+          } else this.onSeek(line.time!);
           this.resume();
         };
       }

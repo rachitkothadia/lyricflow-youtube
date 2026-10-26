@@ -11,7 +11,9 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 - Compact red, blue, green and dark-yellow themes.
 - Fullscreen lyrics beside the video. Drag the divider to change the space given to lyrics; hide or show the panel whenever needed.
 - Click a timestamped lyric to jump to that part of the song and resume playback.
-- Per-song timing adjustment from **−10 to +10 seconds**, in **0.1-second steps**.
+- Timing adjustment from **−10 to +10 seconds**, in **0.1-second steps**, saved for each recording.
+- **Match a line to the music** corrects larger intro offsets without moving playback. Fine delay can then refine the match.
+- Optional matching YouTube captions can supply actual video timestamps when every lyric line has a matching caption boundary.
 - Local Romanization for Korean, Japanese, Mandarin and nine Indic scripts. Existing Latin text stays unchanged.
 - Optional tab-audio song identification through AudD, activated explicitly from the toolbar.
 
@@ -50,7 +52,11 @@ This installs a small local reader that the browser launches only when needed. I
 
 ## Use
 
-Open the **three-dot menu** for song correction, source details, color, language and timing controls. Positive timing values delay lyrics; negative values bring them earlier. A new song resets the adjustment. Wheel, touch and keyboard browsing temporarily pause automatic following.
+Open the **three-dot menu** for song correction, source details, color, language and timing controls. Positive timing values delay lyrics; negative values bring them earlier. Corrections are saved locally for the same YouTube video, lyric source, timestamps and recording length. Other recordings start with their own correction. **Reset** clears both alignment and fine delay. Wheel, touch and keyboard browsing temporarily pause automatic following.
+
+For a large intro offset, play the song, choose **Match a line to the music**, then click the line you hear. This aligns the source clock to playback without seeking. Normal lyric clicks still seek. A constant correction cannot repair missing verses or a different song edit.
+
+If only plain lyrics are available, options may offer a **timed edition** of the same song. A different-length edition requires your explicit selection and alignment. **Use matching video captions** reads the current video's available captions through YouTube; it keeps existing timing if the text or line boundaries differ. Automatic captions are labeled. It does not generate, stretch or distribute timestamps.
 
 Fullscreen uses the same lyrics and playback state. Drag the left divider or focus it and use Left/Right arrows; Home/End choose the size limits. Exit fullscreen to return to the regular sidebar.
 
@@ -66,15 +72,17 @@ npm run test:product
 npm run test:fullscreen
 npm run test:playlist
 npm run test:controls
+npm run test:sync
+npm run test:sync-sources
 ```
 
 Install test Chromium with `npx playwright install chromium`. Live provider checks require network access and, for Genius, the local reader. See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), and [provider behavior](docs/PROVIDER_COMPLIANCE.md) for tested scope and limitations.
 
-This is an actively maintained extension. Provider availability, incorrect community metadata and timing, and recent songs without timestamps can affect results. The latest fixes cover playlist priority, shared Genius links, decimal delay entry and recovery from partial provider failures.
+This is an actively maintained extension. Provider availability, incorrect community metadata and timing, and recent songs without timestamps can affect results. Source timestamps are community data, not a guarantee of accuracy for every video. Tracks without usable source or matching caption timestamps remain untimed.
 
 ## Privacy and permissions
 
-Song titles and artists are sent to the selected lyric providers. Romanization runs locally. Audio is sent to AudD only after explicit activation and is discarded locally after completion or cancellation. Personal API tokens stay in browser local storage; none are shipped in this repository.
+Song titles and artists are sent to the selected lyric providers. Romanization runs locally. Timing corrections store only a video/source fingerprint, adjustment and update time; up to 100 are retained locally. Caption timing uses an ordinary same-origin YouTube request already issued by its player; signed request parameters are not saved as source links. Audio is sent to AudD only after explicit activation and is discarded locally after completion or cancellation. Personal API tokens stay in browser local storage; none are shipped in this repository.
 
 The Genius reader performs ordinary public-page requests. It does not supply account cookies, solve challenges or use proxies. An upstream denial is reported as an error.
 

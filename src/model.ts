@@ -15,6 +15,7 @@ export interface Candidate extends Song {
   score?: number;
   provider?: "lrclib" | "genius";
   album?: string;
+  timed?: boolean;
 }
 export interface LyricLine {
   text: string;
@@ -32,6 +33,8 @@ export interface Lyrics {
   sourceLabel?: string;
   romanization?: "existing" | "generated";
   romanizationSystems?: string[];
+  timingCandidates?: Candidate[];
+  timingSource?: { url: string; label: string };
 }
 export interface LyricsProvider {
   get(song: Song, signal: AbortSignal): Promise<Lyrics>;

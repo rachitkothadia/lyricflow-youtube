@@ -1,5 +1,6 @@
 import { artistCredits, sameArtist, cleanTitle } from "../matching/identity";
 import { Song, normalize } from "../model";
+import { watchVideo, recordingDuration } from "../youtube/media";
 export function parseMetadata(
   raw: string,
   channel: string,
@@ -160,7 +161,7 @@ export function readMetadata(doc = document): Song | null {
       "ytd-video-owner-renderer #channel-name a, #owner #channel-name a",
     ),
   );
-  const duration = doc.querySelector("video")?.duration;
+  const duration = recordingDuration(watchVideo(doc));
   const song = parseMetadata(title, artist, duration);
   if (!song) return null;
   song.rawTitle = title;

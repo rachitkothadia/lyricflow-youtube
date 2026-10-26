@@ -1,3 +1,15 @@
+# Release 0.7.0 — recording alignment and timing recovery, 2026-10-26
+
+Passed: build, 105 unit tests, 22 new browser synchronization checks, 4 live LRCLIB source-edition checks, 37 fullscreen checks, 20 browser checks, 21 lifecycle checks, 19 product checks, 12 manual-control/shared-Genius checks, and 8 playlist checks. Browser clock checks use generated silent media and explicitly synthetic words. They verify immediate highlight changes during pause/play, combined base/fine seeking, a 20-second line alignment without seeking, actual extension storage persistence/reset/isolation, late recording duration updates, preview/ad exclusion, caption boundary transfer, mismatch/cancellation safety and stale profile rejection.
+
+Root causes: source feature credits embedded in titles were rejected; terminal player-status suffixes hid timed editions; duration arriving after initial metadata could leave an earlier edition selected; a ten-second fine control could not correct larger intro differences. The patch fixes these general paths and adds recording-specific local corrections. Source words are not hardcoded.
+
+Live source checks found compatible timestamped Still Here editions for 270- and 285-second requests. RED's approximately 304-second album edition has source timestamps; the approximately 363-second video edition returns plain lyrics and offers that timed edition explicitly. Duration difference alone does not prove where an intro/skit occurs, so no automatic 59-second shift or proportional timing is generated. Source availability tests do not certify the community timestamps against audible playback.
+
+Caption recovery is verified with deterministic same-origin browser responses, including actual JSON3 cue/word boundaries, exact lyric matching, retained attribution and cancellation. Live playback/caption verification for the named recordings remains blocked: automated YouTube playback requests sign-in, and the user's Mac is locked. No claim of verified recording-specific audio alignment or successful installed-Opera update is made for 0.7. Songs without suitable source timestamps or matching caption boundaries stay untimed.
+
+Evidence: `output/reliability/sync.json`, `sync-sources.json`, `manual-controls.json`, plus the existing browser/fullscreen/playlist/product report paths below. Public reports contain metadata and checks, not lyric corpora or signed caption URLs.
+
 # Release 0.6.0 — playlist priority and loading/control recovery, 2026-10-26
 
 Passed: build and 97 unit tests; 8 playlist checks; 12 manual-source/keyboard checks; 37 fullscreen, 20 browser, 21 lifecycle and 19 product checks. A clean source copy with no generated outputs passed npm ci, build, unit, lifecycle, playlist and manual-control checks.

@@ -5,6 +5,7 @@ output/
 .env*
 .DS_Store
 *.zip
+*.zip.sha256
 *.crx
 *.pem
 *.log
