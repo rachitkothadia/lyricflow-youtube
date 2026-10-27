@@ -1,3 +1,11 @@
+# Release 0.8.0 — manual Genius search inside the panel, 2026-10-27
+
+Build and 107 unit tests passed. Nineteen focused browser checks cover visible recovery controls, metadata prefill, empty results, provider failure/retry, keyboard focus, unsent query edits, obsolete-query/navigation rejection, explicit result selection, narrow layout, hidden recovery UI after success, and retained source attribution without invented timing. Regression checks passed: 37 fullscreen, 20 browser, 21 lifecycle, 12 manual-control/shared-link and 22 synchronization checks.
+
+Actual Genius search in an isolated installed MV3 profile returned nine results for Tera Rastaa Chhodoon Na. Selecting a result loaded 46 lyric lines from the canonical Genius page inside the panel. The profile had no Genius API token. The same visible input rejected a foreign URL, retained the field, and then loaded a shared Genius song URL after stripping tracking parameters. Existing reader identity, permissions and native-host bytes remain unchanged.
+
+Scope: synthetic YouTube layout for UI/clock checks, plus actual Genius/native-reader search and page requests. This verifies in-extension search and lyric retrieval, not live YouTube playback or recording-specific audio alignment. The user's normal browser was not controlled. Reports retain metadata/checks only in `output/reliability/genius-search.json` and the existing regression report paths.
+
 # Release 0.7.0 — recording alignment and timing recovery, 2026-10-26
 
 Passed: build, 105 unit tests, 22 new browser synchronization checks, 4 live LRCLIB source-edition checks, 37 fullscreen checks, 20 browser checks, 21 lifecycle checks, 19 product checks, 12 manual-control/shared-Genius checks, and 8 playlist checks. Browser clock checks use generated silent media and explicitly synthetic words. They verify immediate highlight changes during pause/play, combined base/fine seeking, a 20-second line alignment without seeking, actual extension storage persistence/reset/isolation, late recording duration updates, preview/ad exclusion, caption boundary transfer, mismatch/cancellation safety and stale profile rejection.

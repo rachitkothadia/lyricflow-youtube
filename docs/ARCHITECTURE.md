@@ -1,4 +1,4 @@
-# Architecture — 0.7
+# Architecture — 0.8
 
 `matching/identity.ts` supplies bounded identity hypotheses, creator-credit parsing, title normalization, search plans and match evidence to both lyric providers. Metadata keeps raw title/channel and all explicitly named performers. Genius preserves structured co-primary/featured credits; LRCLIB serialized credits use the same identity checks. Queries find candidates; separate strict evidence gates decide automatic selection. An identity key includes complete credits so updated metadata triggers a fresh lookup. No song-specific catalogue or lyrics are bundled.
 
@@ -11,6 +11,8 @@ Synchronization uses `video.currentTime - (recordingAlignment + fineDelay)`; see
 Optional caption recovery reuses the current video's observed same-origin timedtext request. JSON3 cue/word offsets are source timestamps. Full normalized text must match, and every lyric start must have an actual caption boundary; no missing boundaries are interpolated. Original lyric text and attribution remain, with a separate timing source link. Caption state is restored on completion or cancellation. This path has deterministic browser coverage; actual caption availability remains upstream-dependent.
 
 Chrome native messaging starts one local Node process per Genius request. No server runs in the background. The registered host accepts only the extension origin and read-only public Genius search/song URLs; it has bounded frames, payloads and timeouts. The stable public manifest key preserves the packaged extension identity across folders.
+
+Empty/error states expose a manual Genius search form. The authenticated `GENIUS_SEARCH` message reuses the same public-page reader as automatic fallback, validates a 2–200-character query and returns up to ten safe song choices without automatic identity filtering. Lyrics are fetched only after explicit selection. Pasted Genius song URLs use the existing validated page-loading path. Manual requests disable automatic replacement for that video; request generations reject stale results after another query or navigation. Query edits and keyboard focus survive responses. Successful lyrics hide the recovery form.
 
 The UI renders only the song name, lyrics and options affordance by default. Settings and attribution are inside a bounded menu. Actual currentTime drives active lines; a 580ms requestAnimationFrame scroll retargets to the current line's geometry. Ordinary clicks do not disable following. Manual browsing pauses it for six seconds; reduced motion uses immediate positioning. Animation frames and timers are cancelled on state changes/disposal.
 

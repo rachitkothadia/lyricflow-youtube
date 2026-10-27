@@ -8,6 +8,7 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 
 - Automatic song detection, including collaborations and song-first video titles.
 - LRCLIB lyrics and timestamps, with Genius as a readable-lyrics fallback.
+- Search Genius inside the sidebar when lyrics are missing. Enter a song/artist or paste a Genius song link, then choose the result.
 - Compact red, blue, green and dark-yellow themes.
 - Fullscreen lyrics beside the video. Drag the divider to change the space given to lyrics; hide or show the panel whenever needed.
 - Click a timestamped lyric to jump to that part of the song and resume playback.
@@ -54,6 +55,8 @@ This installs a small local reader that the browser launches only when needed. I
 
 Open the **three-dot menu** for song correction, source details, color, language and timing controls. Positive timing values delay lyrics; negative values bring them earlier. Corrections are saved locally for the same YouTube video, lyric source, timestamps and recording length. Other recordings start with their own correction. **Reset** clears both alignment and fine delay. Wheel, touch and keyboard browsing temporarily pause automatic following.
 
+When lyrics cannot load, **Find lyrics on Genius** appears directly in the panel. Search by song or artist and select a result to load its lyrics here; the same input also accepts a Genius song URL. Search stays available after empty results or errors, and can be used before automatic song detection. It uses the existing Genius reader and requires no Genius API token. **Search Genius** is also available in the menu for correcting an already loaded song.
+
 For a large intro offset, play the song, choose **Match a line to the music**, then click the line you hear. This aligns the source clock to playback without seeking. Normal lyric clicks still seek. A constant correction cannot repair missing verses or a different song edit.
 
 If only plain lyrics are available, options may offer a **timed edition** of the same song. A different-length edition requires your explicit selection and alignment. **Use matching video captions** reads the current video's available captions through YouTube; it keeps existing timing if the text or line boundaries differ. Automatic captions are labeled. It does not generate, stretch or distribute timestamps.
@@ -74,6 +77,7 @@ npm run test:playlist
 npm run test:controls
 npm run test:sync
 npm run test:sync-sources
+npm run test:genius-search
 ```
 
 Install test Chromium with `npx playwright install chromium`. Live provider checks require network access and, for Genius, the local reader. See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), and [provider behavior](docs/PROVIDER_COMPLIANCE.md) for tested scope and limitations.

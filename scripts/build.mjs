@@ -76,7 +76,7 @@ await writeFile(
       manifest_version: 3,
       key: extensionKey,
       name: "LyricFlow — Romanized lyrics",
-      version: "0.7.0",
+      version: "0.8.0",
       minimum_chrome_version: "120",
       description:
         "Compact animated lyrics for YouTube, automatic song matching, and local Romanization.",

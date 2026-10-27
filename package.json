@@ -1,6 +1,6 @@
 {
   "name": "lyricflow",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,7 +21,8 @@
     "test:playlist": "node scripts/playlist-qa.mjs",
     "test:controls": "node scripts/manual-controls-qa.mjs",
     "test:sync": "node scripts/sync-qa.mjs",
-    "test:sync-sources": "tsx scripts/sync-sources-qa.ts"
+    "test:sync-sources": "tsx scripts/sync-sources-qa.ts",
+    "test:genius-search": "node scripts/genius-search-qa.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",

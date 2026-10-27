@@ -44,6 +44,34 @@ export class GeniusWebProvider {
       throw new Error("Genius did not return readable lyrics for this page.");
     return { kind: "genius-page", html, url, song };
   }
+  async search(query: string, signal: AbortSignal): Promise<Candidate[]> {
+    if (
+      typeof query !== "string" ||
+      query.trim().length < 2 ||
+      query.trim().length > 200
+    )
+      throw new Error("Enter a song query of 2–200 characters.");
+    signal.throwIfAborted();
+    const data = JSON.parse(
+      await this.request(
+        "https://genius.com/api/search?" +
+          new URLSearchParams({ q: query.trim() }),
+        signal,
+      ),
+    );
+    if (!Array.isArray(data?.response?.hits))
+      throw new Error(
+        "Genius returned an unreadable search response. Try again.",
+      );
+    return [
+      ...new Map(
+        parseGeniusResults(data).map((c) => [
+          c.id,
+          { ...c, provider: "genius" as const },
+        ]),
+      ).values(),
+    ].slice(0, 10);
+  }
   async resolve(
     song: Song,
     signal: AbortSignal,

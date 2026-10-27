@@ -51,6 +51,8 @@ export class LyricsPanel {
   private calibrationButton = el("button", "Match a line to the music");
   private timingMessage = el("p", undefined, "timing-state timing-hint");
   private timingVersions = el("div");
+  private geniusQuery = el("input");
+  private recovery = el("form", undefined, "genius-search");
   onLanguage = (_language: string) => {};
   onStopAudio = () => {};
   onRetry = () => {};
@@ -64,6 +66,7 @@ export class LyricsPanel {
   onResetTiming = () => {};
   onVideoTiming = () => {};
   onGenius = (_url: string) => {};
+  onGeniusSearch = (_query: string) => {};
   private resizeObserver?: ResizeObserver;
   private outside = (event: PointerEvent) => {
     if (this.settings.open && !event.composedPath().includes(this.settings))
@@ -116,6 +119,19 @@ export class LyricsPanel {
       if (event.key === "Escape") this.settings.open = false;
     });
     this.controls();
+    this.geniusQuery.type = "search";
+    this.geniusQuery.maxLength = 2000;
+    this.geniusQuery.placeholder = "Song, artist or Genius URL";
+    this.geniusQuery.setAttribute("aria-label", "Song, artist or Genius link");
+    const label = el("label", "Find lyrics on Genius");
+    label.append(this.geniusQuery);
+    const submit = el("button", "Search Genius");
+    submit.type = "submit";
+    this.recovery.append(label, submit);
+    this.recovery.onsubmit = (event) => {
+      event.preventDefault();
+      this.onGeniusSearch(this.geniusQuery.value);
+    };
     document.addEventListener("pointerdown", this.outside);
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.manual) this.scrollActive();
@@ -149,6 +165,10 @@ export class LyricsPanel {
     const search = this.button("Search", () => {
       this.settings.open = false;
       this.onSearch(query.value);
+    });
+    const geniusSearch = this.button("Search Genius", () => {
+      this.settings.open = false;
+      this.onGeniusSearch(query.value);
     });
     query.onkeydown = (e) => {
       if (e.key === "Enter") search.click();
@@ -309,6 +329,7 @@ export class LyricsPanel {
       controls,
       ql,
       search,
+      geniusSearch,
       palette,
       language,
       ol,
@@ -400,7 +421,14 @@ export class LyricsPanel {
     this.follow.hidden = true;
     this.scrollActive();
   }
-  state(state: PanelState, song?: Song, message?: string) {
+  state(
+    state: PanelState,
+    song?: Song,
+    message?: string,
+    geniusQuery?: string,
+  ) {
+    const recoveryVisible = this.recovery.isConnected;
+    const recoveryFocused = this.recovery.contains(this.shadow.activeElement);
     this.calibrationButton.disabled = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.resumeTimer);
@@ -431,13 +459,30 @@ export class LyricsPanel {
       String(state === "loading" || state === "detecting"),
     );
     this.viewport.replaceChildren();
+    this.viewport.scrollTop = 0;
+    if (
+      geniusQuery !== undefined ||
+      (state === "detecting" && !song) ||
+      ["initial", "unavailable", "no-results", "error", "ambiguous"].includes(
+        state,
+      )
+    ) {
+      if (geniusQuery === undefined || state === "loading" || !recoveryVisible)
+        this.geniusQuery.value =
+          geniusQuery ??
+          [song?.artist, song?.title].filter(Boolean).join(" - ");
+      this.viewport.append(this.recovery);
+      if (recoveryFocused) this.geniusQuery.focus({ preventScroll: true });
+    }
     if (state === "loading" || state === "detecting") {
       for (let i = 0; i < 4; i++)
         this.viewport.append(el("div", undefined, "skeleton"));
     } else if (message) this.viewport.append(el("p", message, "message"));
   }
-  showCandidates(song: Song, candidates: Candidate[]) {
-    this.state("ambiguous", song);
+  showCandidates(song: Song, candidates: Candidate[], geniusQuery?: string) {
+    this.state("ambiguous", song, undefined, geniusQuery);
+    if (geniusQuery !== undefined)
+      this.status.textContent = "Choose lyrics from Genius";
     for (const c of candidates) {
       const b = this.button(c.title, () => {
         this.settings.open = false;

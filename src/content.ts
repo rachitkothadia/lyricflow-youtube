@@ -1,5 +1,6 @@
 import { identityKey } from "./matching/identity";
 import { readGeniusPage } from "./lyrics/GeniusPage";
+import { GeniusWebProvider } from "./lyrics/GeniusWebProvider";
 import { YouTubeLayoutAdapter } from "./youtube/YouTubeLayoutAdapter";
 import {
   readMetadata,
@@ -53,6 +54,7 @@ export function start() {
   const layout = new YouTubeLayoutAdapter(reconcile);
   const panel = new LyricsPanel(layout.root.shadowRoot!);
   const provider = new LrclibProvider();
+  const genius = new GeniusWebProvider();
   let language: "ja" | "zh" | "ko" | undefined;
   let original: Lyrics | undefined;
   async function rpc(type: string, payload: object, signal: AbortSignal) {
@@ -63,6 +65,22 @@ export function start() {
     }
     if (type === "TIMING_LOAD") return { profile: null };
     if (type === "TIMING_SAVE") return { ok: true };
+    if (type === "GENIUS_SEARCH")
+      return {
+        candidates: await genius.search(
+          (payload as { query: string }).query,
+          signal,
+        ),
+      };
+    if (
+      type === "GENIUS_PAGE" ||
+      (type === "LYRICS_GET" && (payload as Candidate).provider === "genius")
+    )
+      return genius.page(
+        (payload as { url: string }).url,
+        (payload as { song: Song }).song,
+        signal,
+      );
     if (type === "LYRICS_GET")
       return {
         kind: "ready",
@@ -278,6 +296,42 @@ export function start() {
     const song = parseMetadata(query, "");
     if (song) await load(song);
   }
+  async function searchGenius(query: string) {
+    query = query.trim();
+    if (/^(?:https?:\/\/|(?:www\.)?genius\.com\/)/i.test(query)) {
+      await panel.onGenius(
+        /^https?:\/\//i.test(query) ? query : "https://" + query,
+      );
+      return;
+    }
+    automatic = false;
+    reset();
+    const song = current || { title: "Lyrics", artist: "", version: "" };
+    const seq = generation,
+      signal = request.signal;
+    panel.state("loading", song, undefined, query);
+    try {
+      const result = await rpc("GENIUS_SEARCH", { query }, signal);
+      if (signal.aborted || disposed || seq !== generation) return;
+      if (result.candidates.length)
+        panel.showCandidates(song, result.candidates, query);
+      else
+        panel.state(
+          "no-results",
+          song,
+          "No Genius results. Try another spelling, add the artist, or paste a Genius song link.",
+          query,
+        );
+    } catch (error) {
+      if (signal.aborted || disposed || seq !== generation) return;
+      panel.state(
+        "unavailable",
+        song,
+        error instanceof Error ? error.message : "Genius search failed.",
+        query,
+      );
+    }
+  }
   async function select(candidate: Candidate) {
     automatic = false;
     await load(candidate, candidate.id, candidate);
@@ -354,7 +408,7 @@ export function start() {
     automatic = false;
     const song = current || { artist: "", title: "Genius lyrics", version: "" };
     reset();
-    panel.state("loading", song);
+    panel.state("loading", song, undefined, url);
     const seq = generation;
     try {
       const result = await rpc("GENIUS_PAGE", { url, song }, request.signal);
@@ -369,6 +423,7 @@ export function start() {
           "error",
           song,
           e instanceof Error ? e.message : "Genius could not load.",
+          url,
         );
     }
   };
@@ -397,6 +452,7 @@ export function start() {
     reconcile();
   };
   panel.onSearch = (q) => void search(q);
+  panel.onGeniusSearch = (q) => void searchGenius(q);
   panel.onChoose = (c) => void select(c);
   panel.onDemo = () => {
     automatic = false;

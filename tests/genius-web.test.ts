@@ -10,6 +10,54 @@ const hit = (id: number, title = "Underpressure", artist = "Karma") => ({
     url: `https://genius.com/${artist.toLowerCase()}-${title.toLowerCase()}-lyrics`,
   },
 });
+test("manual Genius search returns choices without automatic title/artist filtering", async () => {
+  const urls: string[] = [];
+  const p = new GeniusWebProvider(async (input) => {
+    urls.push(String(input));
+    return new Response(
+      JSON.stringify({
+        response: {
+          hits: [
+            hit(21, "Paper Sun", "Northlight"),
+            hit(22, "Paper Moon", "Daybreak"),
+          ],
+        },
+      }),
+    );
+  });
+  const result = await p.search("  paper song  ", new AbortController().signal);
+  assert.equal(new URL(urls[0]).searchParams.get("q"), "paper song");
+  assert.deepEqual(
+    result.map((c) => c.id),
+    [21, 22],
+  );
+  assert.ok(result.every((c) => c.provider === "genius"));
+  assert.equal(
+    urls.length,
+    1,
+    "Search must not fetch lyrics until a result is chosen",
+  );
+});
+test("manual Genius search validates input before requesting and bounds choices", async () => {
+  let requests = 0;
+  const p = new GeniusWebProvider(async () => {
+    requests++;
+    return new Response(
+      JSON.stringify({
+        response: { hits: Array.from({ length: 30 }, (_, i) => hit(i + 1)) },
+      }),
+    );
+  });
+  for (const query of ["", " a ", "x".repeat(201)])
+    await assert.rejects(
+      p.search(query, new AbortController().signal),
+      /2.*200/,
+    );
+  assert.equal(requests, 0);
+  assert.ok(
+    (await p.search("paper sun", new AbortController().signal)).length <= 10,
+  );
+});
 test("Genius exact public match retrieves only the canonical lyrics page", async () => {
   const urls: string[] = [];
   const provider = new GeniusWebProvider(async (input) => {
