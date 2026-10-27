@@ -20,6 +20,13 @@ await mkdir("dist/native", { recursive: true });
 await copyFile("native/genius-host.cjs", "dist/native/genius-host.cjs");
 await Promise.all([
   build({
+    entryPoints: ["src/keyboard-entry.ts"],
+    outfile: "dist/keyboard.js",
+    bundle: true,
+    format: "iife",
+    target: "chrome120",
+  }),
+  build({
     entryPoints: ["src/entry.ts"],
     alias: { path: resolve("src/lyrics/browserPath.ts") },
     outfile: "dist/content.js",
@@ -76,7 +83,7 @@ await writeFile(
       manifest_version: 3,
       key: extensionKey,
       name: "LyricFlow — Romanized lyrics",
-      version: "0.8.0",
+      version: "0.8.1",
       minimum_chrome_version: "120",
       description:
         "Compact animated lyrics for YouTube, automatic song matching, and local Romanization.",
@@ -107,6 +114,11 @@ await writeFile(
       background: { service_worker: "background.js", type: "module" },
       options_page: "options.html",
       content_scripts: [
+        {
+          matches: ["https://www.youtube.com/*"],
+          js: ["keyboard.js"],
+          run_at: "document_start",
+        },
         {
           matches: ["https://www.youtube.com/*"],
           js: ["content.js"],

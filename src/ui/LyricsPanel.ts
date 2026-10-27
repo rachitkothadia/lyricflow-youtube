@@ -1,5 +1,6 @@
 import { Candidate, Lyrics, Song } from "../model";
 import { styles } from "./styles";
+import { protectPanelKeyboard } from "../youtube/keyboard";
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   text?: string,
@@ -68,11 +69,13 @@ export class LyricsPanel {
   onGenius = (_url: string) => {};
   onGeniusSearch = (_query: string) => {};
   private resizeObserver?: ResizeObserver;
+  private releaseKeyboard: () => void;
   private outside = (event: PointerEvent) => {
     if (this.settings.open && !event.composedPath().includes(this.settings))
       this.settings.open = false;
   };
   constructor(private shadow: ShadowRoot) {
+    this.releaseKeyboard = protectPanelKeyboard(shadow);
     const style = el("style");
     style.textContent = styles;
     shadow.replaceChildren(style, this.shell);
@@ -94,6 +97,11 @@ export class LyricsPanel {
       passive: true,
     });
     this.viewport.addEventListener("keydown", (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("input,textarea,select,[contenteditable]")
+      )
+        return;
       if (
         event.target instanceof HTMLButtonElement &&
         [" ", "Enter"].includes(event.key)
@@ -612,6 +620,7 @@ export class LyricsPanel {
     this.frame = requestAnimationFrame(animate);
   }
   dispose() {
+    this.releaseKeyboard();
     this.resizeObserver?.disconnect();
     document.removeEventListener("pointerdown", this.outside);
     cancelAnimationFrame(this.frame);
