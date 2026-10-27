@@ -23,7 +23,7 @@ try {
    await page.getByLabel('Lyrics options',{exact:true}).click();await page.getByLabel('Timing offset (seconds)',{exact:true}).fill('0.6');await page.getByLabel('Lyrics options',{exact:true}).click();
    const line=page.locator('button.line').nth(3),target=Number(await line.getAttribute('data-time'))+.6;
    await line.click();await page.waitForFunction(t=>Math.abs(document.querySelector('video').currentTime-t)<1,target);await page.evaluate(()=>document.querySelector('video').pause());
-   console.log('LIVE_SEEK_STATE',JSON.stringify(await root.evaluate(e=>({time:document.querySelector('video').currentTime,offset:e.shadowRoot.querySelector('input[type=number]').value,active:e.shadowRoot.querySelector('.line.active')?.dataset.time,requested:e.shadowRoot.querySelectorAll('.line')[3].dataset.time}))));
+   console.log('LIVE_SEEK_STATE',JSON.stringify(await root.evaluate(e=>({time:document.querySelector('video').currentTime,offset:e.querySelector('input[type=number]').value,active:e.shadowRoot.querySelector('.line.active')?.dataset.time,requested:e.shadowRoot.querySelectorAll('.line')[3].dataset.time}))));
    await page.waitForFunction(()=>document.querySelector('#lyricflow-root').shadowRoot.querySelectorAll('.line')[3].classList.contains('active'));
   }
   await page.locator('video').hover();await page.locator('.ytp-fullscreen-button').click();

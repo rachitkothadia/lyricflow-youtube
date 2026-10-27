@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { resolve } from "node:path";
 import { mkdir, writeFile, copyFile, cp } from "node:fs/promises";
 await mkdir("dist", { recursive: true });
+const { version } = JSON.parse(await readFile("package.json", "utf8"));
 let extensionKey;
 try {
   extensionKey = JSON.parse(await readFile("extension-key.json", "utf8")).key;
@@ -28,6 +29,7 @@ await Promise.all([
   }),
   build({
     entryPoints: ["src/entry.ts"],
+    define: { __LYRICFLOW_VERSION__: JSON.stringify(version) },
     alias: { path: resolve("src/lyrics/browserPath.ts") },
     outfile: "dist/content.js",
     bundle: true,
@@ -83,7 +85,7 @@ await writeFile(
       manifest_version: 3,
       key: extensionKey,
       name: "LyricFlow — Romanized lyrics",
-      version: "0.8.1",
+      version,
       minimum_chrome_version: "120",
       description:
         "Compact animated lyrics for YouTube, automatic song matching, and local Romanization.",

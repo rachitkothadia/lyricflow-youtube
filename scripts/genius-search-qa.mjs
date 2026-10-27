@@ -101,7 +101,7 @@ try {
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const form = page.locator(".genius-search"),
-    input = form.locator("input");
+    input = page.getByLabel("Song, artist or Genius link", { exact: true });
   await page.getByText("No matching lyrics found.", { exact: true }).waitFor();
   check(
     "missing lyrics show Genius search without opening settings",
@@ -110,6 +110,18 @@ try {
   check(
     "manual query starts with detected song information",
     (await input.inputValue()).includes("Raaste"),
+  );
+  await input.fill("my unsent song");
+  await page.evaluate(() => {
+    document.querySelector("yt-formatted-string").textContent =
+      "LyricFlow Test Ensemble - Updated Metadata";
+    document.dispatchEvent(new Event("yt-page-data-updated"));
+  });
+  await page.waitForTimeout(250);
+  check(
+    "same-video metadata updates preserve the focused search draft",
+    (await input.inputValue()) === "my unsent song" &&
+      (await input.evaluate((e) => document.activeElement === e)),
   );
   await input.fill("empty");
   await input.press("Enter");
@@ -136,7 +148,7 @@ try {
   );
   check(
     "search errors preserve keyboard focus",
-    await input.evaluate((e) => e.getRootNode().activeElement === e),
+    await input.evaluate((e) => document.activeElement === e),
   );
   await input.fill("slow");
   await input.press("Enter");
@@ -247,7 +259,7 @@ try {
   );
   await page.goto("https://www.youtube.com/watch?v=genius004dd");
   const form = page.locator(".genius-search"),
-    input = form.locator("input");
+    input = page.getByLabel("Song, artist or Genius link", { exact: true });
   await input.waitFor();
   check(
     "Genius search is available even without detected song metadata",

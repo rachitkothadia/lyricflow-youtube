@@ -1,6 +1,7 @@
 import { Candidate, Lyrics, Song } from "../model";
 import { styles } from "./styles";
 import { protectPanelKeyboard } from "../youtube/keyboard";
+import { buildVersion } from "../buildInfo";
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   text?: string,
@@ -53,6 +54,8 @@ export class LyricsPanel {
   private timingMessage = el("p", undefined, "timing-state timing-hint");
   private timingVersions = el("div");
   private geniusQuery = el("input");
+  private offsetInput = el("input");
+  private projectedInputs: HTMLInputElement[] = [];
   private recovery = el("form", undefined, "genius-search");
   onLanguage = (_language: string) => {};
   onStopAudio = () => {};
@@ -60,6 +63,7 @@ export class LyricsPanel {
   onDemo = () => {};
   onImport = (_raw: string) => {};
   onSearch = (_query: string) => {};
+  onEditSearch = () => {};
   onChoose = (_candidate: Candidate) => {};
   onOffset = (_offset: number) => {};
   onSeek = (_time: number) => {};
@@ -68,6 +72,7 @@ export class LyricsPanel {
   onVideoTiming = () => {};
   onGenius = (_url: string) => {};
   onGeniusSearch = (_query: string) => {};
+  onReload = () => location.reload();
   private resizeObserver?: ResizeObserver;
   private releaseKeyboard: () => void;
   private outside = (event: PointerEvent) => {
@@ -76,6 +81,7 @@ export class LyricsPanel {
   };
   constructor(private shadow: ShadowRoot) {
     this.releaseKeyboard = protectPanelKeyboard(shadow);
+    shadow.host.setAttribute("data-lyricflow-version", buildVersion);
     const style = el("style");
     style.textContent = styles;
     shadow.replaceChildren(style, this.shell);
@@ -125,20 +131,30 @@ export class LyricsPanel {
     });
     this.shell.addEventListener("keydown", (event) => {
       if (event.key === "Escape") this.settings.open = false;
+      event.stopPropagation();
     });
+    for (const type of ["keypress", "keyup"])
+      this.shell.addEventListener(type, (event) => event.stopPropagation());
     this.controls();
     this.geniusQuery.type = "search";
     this.geniusQuery.maxLength = 2000;
     this.geniusQuery.placeholder = "Song, artist or Genius URL";
     this.geniusQuery.setAttribute("aria-label", "Song, artist or Genius link");
     const label = el("label", "Find lyrics on Genius");
-    label.append(this.geniusQuery);
+    label.append(this.projectInput(this.geniusQuery));
+    label.onclick = () => this.geniusQuery.focus();
     const submit = el("button", "Search Genius");
     submit.type = "submit";
     this.recovery.append(label, submit);
     this.recovery.onsubmit = (event) => {
       event.preventDefault();
       this.onGeniusSearch(this.geniusQuery.value);
+    };
+    this.geniusQuery.onkeydown = (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        this.recovery.requestSubmit();
+      }
     };
     document.addEventListener("pointerdown", this.outside);
     this.resizeObserver = new ResizeObserver(() => {
@@ -152,6 +168,23 @@ export class LyricsPanel {
     b.onclick = callback;
     return b;
   }
+  private projectInput(input: HTMLInputElement): HTMLSlotElement {
+    // Light-DOM inputs remain document.activeElement, so native player shortcuts
+    // recognize text editing even when their capture handlers run before ours.
+    const slot = el("slot");
+    if (["text", "search", "url"].includes(input.type))
+      input.addEventListener("focus", () => this.onEditSearch());
+    slot.name = input.slot = "lyricflow-input-" + this.projectedInputs.length;
+    input.style.cssText =
+      "box-sizing:border-box;min-width:0;font:inherit;color-scheme:dark;color:#fff;background:#202c2b;border:1px solid rgba(255,255,255,.2);border-radius:5px;" +
+      (input.type === "number"
+        ? "width:78px;padding:5px;margin:0;"
+        : "width:100%;padding:8px;margin:5px 0 7px;");
+    if (input.type === "search") input.style.marginBottom = "0";
+    this.shadow.host.append(input);
+    this.projectedInputs.push(input);
+    return slot;
+  }
   private controls() {
     const summary = el("summary", "Sources & settings");
     summary.setAttribute("aria-label", "Lyrics options");
@@ -161,6 +194,7 @@ export class LyricsPanel {
     query.type = "text";
     query.maxLength = 200;
     query.placeholder = "Artist - Song";
+    query.setAttribute("aria-label", "Search lyrics");
     controls.append(
       this.button("Retry", () => {
         this.settings.open = false;
@@ -169,7 +203,8 @@ export class LyricsPanel {
       this.button("Correct song", () => query.focus()),
     );
     const ql = el("label", "Search lyrics");
-    ql.append(query);
+    ql.append(this.projectInput(query));
+    ql.onclick = () => query.focus();
     const search = this.button("Search", () => {
       this.settings.open = false;
       this.onSearch(query.value);
@@ -179,7 +214,10 @@ export class LyricsPanel {
       this.onGeniusSearch(query.value);
     });
     query.onkeydown = (e) => {
-      if (e.key === "Enter") search.click();
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        search.click();
+      }
     };
     const palette = el("select");
     palette.setAttribute("aria-label", "Panel color");
@@ -211,7 +249,7 @@ export class LyricsPanel {
       language.append(o);
     }
     language.onchange = () => this.onLanguage(language.value);
-    const offset = el("input");
+    const offset = this.offsetInput;
     offset.type = "number";
     offset.min = "-10";
     offset.max = "10";
@@ -219,7 +257,9 @@ export class LyricsPanel {
     offset.value = "0.0";
     const ol = el("label", "Timing offset (seconds)");
     offset.id = "lyricflow-offset";
+    offset.setAttribute("aria-label", "Timing offset (seconds)");
     ol.htmlFor = offset.id;
+    ol.onclick = () => offset.focus();
     const setOffset = (value: number) => {
       const rounded = Math.max(-10, Math.min(10, Math.round(value * 10) / 10));
       offset.value = rounded.toFixed(1);
@@ -249,7 +289,7 @@ export class LyricsPanel {
     later.setAttribute("aria-label", "Lyrics later by 0.1 seconds");
     stepper.append(
       earlier,
-      offset,
+      this.projectInput(offset),
       later,
       this.button("Reset", () => {
         this.onResetTiming();
@@ -284,14 +324,16 @@ export class LyricsPanel {
     const source = el("input");
     source.type = "url";
     source.placeholder = "https://genius.com/Artist-song-lyrics";
+    source.setAttribute("aria-label", "Genius song link");
     const sl = el("label", "Genius song link");
-    sl.append(source);
+    sl.append(this.projectInput(source));
+    sl.onclick = () => source.focus();
     const useSource = this.button("Load Genius lyrics", () => {
       this.settings.open = false;
       this.onGenius(source.value);
     });
     source.onkeydown = (event) => {
-      if (event.key === "Enter") {
+      if (event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
         useSource.click();
       }
@@ -334,6 +376,7 @@ export class LyricsPanel {
     );
     this.menu.append(
       el("p", "Lyrics options", "menu-title"),
+      el("p", "LyricFlow " + buildVersion, "build-info timing-hint"),
       controls,
       ql,
       search,
@@ -372,18 +415,14 @@ export class LyricsPanel {
     );
   }
   resetOffset() {
-    const input =
-      this.menu.querySelector<HTMLInputElement>("input[type=number]");
-    if (input) input.value = "0.0";
+    this.offsetInput.value = "0.0";
     this.timingMessage.textContent = "";
     this.calibrating = false;
     this.calibrationButton.textContent = "Match a line to the music";
   }
   timingCorrection(base: number, fine: number, replaceInput = false) {
     if (replaceInput) {
-      const input =
-        this.menu.querySelector<HTMLInputElement>("input[type=number]");
-      if (input) input.value = fine.toFixed(1);
+      this.offsetInput.value = fine.toFixed(1);
     }
     const total = Math.round((base + fine) * 10) / 10;
     this.timingMessage.textContent = total
@@ -436,7 +475,9 @@ export class LyricsPanel {
     geniusQuery?: string,
   ) {
     const recoveryVisible = this.recovery.isConnected;
-    const recoveryFocused = this.recovery.contains(this.shadow.activeElement);
+    const recoveryFocused =
+      this.recovery.contains(this.shadow.activeElement) ||
+      document.activeElement === this.geniusQuery;
     this.calibrationButton.disabled = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.resumeTimer);
@@ -485,7 +526,13 @@ export class LyricsPanel {
     if (state === "loading" || state === "detecting") {
       for (let i = 0; i < 4; i++)
         this.viewport.append(el("div", undefined, "skeleton"));
-    } else if (message) this.viewport.append(el("p", message, "message"));
+    } else if (message) {
+      this.viewport.append(el("p", message, "message"));
+      if (message.includes("Reload this YouTube tab"))
+        this.viewport.append(
+          this.button("Reload YouTube", () => this.onReload()),
+        );
+    }
   }
   showCandidates(song: Song, candidates: Candidate[], geniusQuery?: string) {
     this.state("ambiguous", song, undefined, geniusQuery);
@@ -513,6 +560,9 @@ export class LyricsPanel {
     this.calibrationButton.textContent = "Match a line to the music";
     this.calibrationButton.disabled = !timed;
     this.setTimingCandidates(data.timingCandidates || []);
+    this.offsetInput.disabled = !timed;
+    this.offsetInput.title = timed ? "" : "This source has no line timestamps";
+    this.offsetInput.style.opacity = timed ? "" : ".4";
     for (const control of this.menu.querySelectorAll<
       HTMLInputElement | HTMLButtonElement
     >(".timing-stepper input,.timing-stepper button")) {
@@ -621,6 +671,8 @@ export class LyricsPanel {
   }
   dispose() {
     this.releaseKeyboard();
+    this.projectedInputs.forEach((input) => input.remove());
+    this.projectedInputs = [];
     this.resizeObserver?.disconnect();
     document.removeEventListener("pointerdown", this.outside);
     cancelAnimationFrame(this.frame);

@@ -29,7 +29,11 @@ import {
 import { artistCredits } from "./matching/identity";
 import { alignLyrics } from "./lyrics/LyricsMatcher";
 import { videoCaptions, alignCaptionTiming } from "./timing/YouTubeCaptions";
-export function start() {
+export function start(requireExtension = false) {
+  const extensionMode =
+    requireExtension || (typeof chrome !== "undefined" && !!chrome.runtime?.id);
+  const reconnectMessage =
+    "LyricFlow was updated or disconnected. Reload this YouTube tab to reconnect.";
   let disposed = false,
     automatic = true,
     request = new AbortController(),
@@ -58,8 +62,24 @@ export function start() {
   let language: "ja" | "zh" | "ko" | undefined;
   let original: Lyrics | undefined;
   async function rpc(type: string, payload: object, signal: AbortSignal) {
-    if (typeof chrome !== "undefined" && chrome.runtime?.id) {
-      const result = await chrome.runtime.sendMessage({ type, ...payload });
+    signal.throwIfAborted();
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+    if (extensionMode || runtime?.id) {
+      let result;
+      try {
+        if (!runtime?.id) throw new Error(reconnectMessage);
+        result = await runtime.sendMessage({ type, ...payload });
+        if (!result) throw new Error(reconnectMessage);
+      } catch (error) {
+        if (
+          !runtime?.id ||
+          /context invalidated|receiving end does not exist|could not establish connection/i.test(
+            error instanceof Error ? error.message : "",
+          )
+        )
+          throw new Error(reconnectMessage);
+        throw error;
+      }
       if (result?.error) throw new Error(result.error);
       return result;
     }
@@ -452,6 +472,9 @@ export function start() {
     reconcile();
   };
   panel.onSearch = (q) => void search(q);
+  panel.onEditSearch = () => {
+    automatic = false;
+  };
   panel.onGeniusSearch = (q) => void searchGenius(q);
   panel.onChoose = (c) => void select(c);
   panel.onDemo = () => {

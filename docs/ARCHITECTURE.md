@@ -16,6 +16,10 @@ Empty/error states expose a manual Genius search form. The authenticated `GENIUS
 
 The UI renders only the song name, lyrics and options affordance by default. Settings and attribution are inside a bounded menu. Actual currentTime drives active lines; a 580ms requestAnimationFrame scroll retargets to the current line's geometry. Ordinary clicks do not disable following. Manual browsing pauses it for six seconds; reduced motion uses immediate positioning. Animation frames and timers are cancelled on state changes/disposal.
 
+Editable search, URL and timing inputs are light-DOM children projected into the panel through named slots. They remain the actual `document.activeElement`, so player shortcuts recognize text editing even when capture handlers predate the panel. ARIA names preserve labels; explicit Enter handling submits the slotted search form. The early keyboard guard remains for controls inside Shadow DOM. Projected inputs are removed on disposal.
+
+The YouTube entry requires an extension connection. Once initialized as an extension, a missing runtime or invalidated messaging context cannot fall back to cross-origin browser fetches. The panel explains the disconnected state and offers Reload YouTube. Its options display the compiled content-script version, independently of the extension manager's current manifest version. Loopback/source fixtures retain their explicit standalone path.
+
 
 YouTube metadata → background LRCLIB lookup → conservative recording match or candidate choice → source-native lyrics and optional real timestamps → local Romanization → Shadow DOM panel → video-time synchronization.
 
@@ -30,3 +34,5 @@ UI uses native keyboard-accessible controls, normal-flow placement, reduced-moti
 Timed lines are native buttons. Their callback adds the current offset to the source timestamp, clamps into actual media seekable ranges (or finite recording duration), seeks and resumes playback/following. Untimed text stays non-interactive. The synchronizer tolerates browser microsecond rounding at timestamp boundaries. Delay input is clamped and rounded to tenths; no timestamps are fabricated or rewritten.
 
 Playlist priority is enforced in the outer sidebar on every layout reconciliation, including late insertions and container replacement. Manual Genius links use page-derived identity after fixed-origin URL normalization; automatic matching stays strict. Delay editing separates live application from committed formatting. Optional provider failures preserve useful existing results, while query-specific overload and explicit global rate limits have different recovery behavior.
+
+Focusing a manual song or Genius query pauses automatic metadata-driven lookup for the current video, preserving the draft and native focus across late title updates. Retry or navigation restores automatic lookup.

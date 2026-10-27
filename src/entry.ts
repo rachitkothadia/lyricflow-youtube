@@ -1,2 +1,2 @@
 import { start } from "./content";
-start();
+start(location.hostname === "www.youtube.com");

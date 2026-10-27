@@ -72,7 +72,7 @@ try {
   await page.waitForFunction(
     () => document.querySelector("video").readyState >= 2,
   );
-  const query = page.locator(".genius-search input");
+  const query = page.getByLabel("Song, artist or Genius link", { exact: true });
   await query.waitFor();
   await page.locator("video").evaluate((v) => v.play());
   await query.fill("");
@@ -112,9 +112,9 @@ try {
       .evaluate((e) => e.getRootNode().activeElement === e),
   );
   await query.fill("");
-  await query.evaluate((e) => {
+  await page.locator(".genius-search").evaluate((form) => {
     window.searchSubmits = 0;
-    e.closest("form").addEventListener("submit", () => window.searchSubmits++);
+    form.addEventListener("submit", () => window.searchSubmits++);
   });
   await query.press("Enter");
   await page
@@ -146,14 +146,12 @@ try {
     await page.evaluate(() => window.playerActions.length === 0),
   );
   await correction.fill("");
-  await correction.evaluate((e) => {
+  await page.locator(".menu").evaluate((menu) => {
     window.correctionClicks = 0;
-    e.closest(".menu")
-      .querySelectorAll("button")
-      .forEach((b) => {
-        if (b.textContent === "Search")
-          b.addEventListener("click", () => window.correctionClicks++);
-      });
+    menu.querySelectorAll("button").forEach((b) => {
+      if (b.textContent === "Search")
+        b.addEventListener("click", () => window.correctionClicks++);
+    });
   });
   await correction.press("Enter");
   check(

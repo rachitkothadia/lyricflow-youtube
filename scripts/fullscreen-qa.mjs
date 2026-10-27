@@ -144,7 +144,7 @@ try {
         const s = document.querySelector("#lyricflow-root").shadowRoot;
         return {
           video: document.querySelector("video").currentTime,
-          offset: s.querySelector("input[type=number]").value,
+          offset: document.querySelector("#lyricflow-root input[type=number]").value,
           active: s.querySelector(".line.active")?.dataset.time,
         };
       }),
