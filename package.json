@@ -1,6 +1,6 @@
 {
   "name": "lyricflow",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,8 @@
     "test:genius-search": "node scripts/genius-search-qa.mjs",
     "test:keyboard": "node scripts/keyboard-qa.mjs",
     "test:native-focus": "node scripts/native-focus-qa.mjs",
-    "test:recovery": "node scripts/runtime-recovery-qa.mjs"
+    "test:recovery": "node scripts/runtime-recovery-qa.mjs",
+    "test:romanization": "node scripts/romanization-qa.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",

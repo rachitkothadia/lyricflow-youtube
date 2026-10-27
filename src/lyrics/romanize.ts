@@ -4,6 +4,7 @@ import { pinyin } from "pinyin-pro";
 import Kuroshiro from "kuroshiro";
 import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
 import type { LyricLine } from "../model";
+import { readableDevanagari, readableIndic } from "./readableIndic";
 
 export interface RomanizationResult {
   lines: (LyricLine & { originalText?: string })[];
@@ -14,11 +15,11 @@ export interface RomanizationResult {
 }
 export interface RomanizationOptions {
   /** Han alone is ambiguous: a known Japanese source must use ja. */
-  language?: "ja" | "zh" | "ko";
+  language?: "ja" | "zh" | "ko" | "hi" | "sa";
   dictionaryPath?: string;
 }
 const indic: [RegExp, string, string][] = [
-  [/[\u0900-\u097f]+/gu, "devanagari", "Devanagari → IAST"],
+  [/[\u0900-\u097f\u200c\u200d]+/gu, "devanagari", "Devanagari → IAST"],
   [/[\u0980-\u09ff]+/gu, "bengali", "Bengali → IAST"],
   [/[\u0a00-\u0a7f]+/gu, "gurmukhi", "Gurmukhi → IAST"],
   [/[\u0a80-\u0aff]+/gu, "gujarati", "Gujarati → IAST"],
@@ -73,8 +74,12 @@ export async function romanizeLines(
           unsupported.add(`${scheme} script is unavailable`);
           return run;
         }
-        systems.add(label);
-        return Sanscript.t(run, scheme, "iast");
+        if (scheme === "devanagari") {
+          systems.add(options.language === "sa" ? "Literal Devanagari Romanization" : "Hindi-style Romanization");
+          return readableDevanagari(run, options.language === "sa");
+        }
+        systems.add(label.replace("IAST", "readable Romanization"));
+        return readableIndic(Sanscript.t(run, scheme, "iast"));
       });
     }
     text = text.replace(/[\p{Script=Hangul}]+/gu, run => {

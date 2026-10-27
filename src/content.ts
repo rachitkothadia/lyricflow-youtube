@@ -59,7 +59,7 @@ export function start(requireExtension = false) {
   const panel = new LyricsPanel(layout.root.shadowRoot!);
   const provider = new LrclibProvider();
   const genius = new GeniusWebProvider();
-  let language: "ja" | "zh" | "ko" | undefined;
+  let language: "ja" | "zh" | "ko" | "hi" | "sa" | undefined;
   let original: Lyrics | undefined;
   async function rpc(type: string, payload: object, signal: AbortSignal) {
     signal.throwIfAborted();

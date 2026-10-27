@@ -16,6 +16,7 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 - **Match a line to the music** corrects larger intro offsets without moving playback. Fine delay can then refine the match.
 - Optional matching YouTube captions can supply actual video timestamps when every lyric line has a matching caption boundary.
 - Local Romanization for Korean, Japanese, Mandarin and nine Indic scripts. Existing Latin text stays unchanged.
+- Readable Hindi spellings with familiar nasal sounds and vowel handling, instead of academic accent marks. A literal Devanagari option supports readings that retain inherent vowels.
 - Optional tab-audio song identification through AudD, activated explicitly from the toolbar.
 
 **Timing is source-dependent.** Genius usually supplies plain text. When no matching timestamps exist, lyrics remain readable without fabricated timing. Generated Romanization is labeled and is not a translation.

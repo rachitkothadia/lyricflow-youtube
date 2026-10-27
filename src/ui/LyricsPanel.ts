@@ -240,6 +240,8 @@ export class LyricsPanel {
     language.setAttribute("aria-label", "Romanization language");
     for (const [value, label] of [
       ["", "Automatic language"],
+      ["hi", "Hindi"],
+      ["sa", "Devanagari (literal)"],
       ["ja", "Japanese"],
       ["zh", "Mandarin Chinese"],
       ["ko", "Korean"],

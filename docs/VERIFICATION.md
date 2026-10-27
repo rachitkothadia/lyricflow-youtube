@@ -1,3 +1,10 @@
+# Release 0.8.3 — readable Indic Romanization, 2026-10-28
+The previous fallback exposed scholarly IAST diacritics, retained Sanskrit-style inherent vowels in Hindi, and mishandled decomposed nukta letters. Generated Indic output now uses familiar Latin spellings. Devanagari adds Hindi-style schwa/nasal handling and canonical nukta normalization; the existing language selector also offers a literal reading. Existing Latin text, source text, source attribution and timestamps are preserved. No song-specific production rules or lyric catalogue were added.
+
+Passed: build and 114 unit tests, including seven added Romanization regressions; 19 product, 20 browser, 15 keyboard and eight native-focus checks; six compiled-bundle Romanization browser checks (182 total). The focused browser run verifies readable rendered words, existing Latin accents, attribution/generated labels, literal-mode switching and retained timestamp seeking using synthetic words and silent media. Regression words cover nasal vowels, aspirates, clusters, written vowel preservation, schwa handling, composed/decomposed Hindi letters, join controls, mixed Latin accents and literal mode. Other Indic scripts use readable letters without Hindi-specific vowel deletion. Korean, Japanese, Mandarin and unsupported-script tests still pass.
+
+These are algorithmic reading aids, not a verified pronunciation dictionary. Live song/browser acceptance is left to the user as requested.
+
 # Release 0.8.2 — native input focus and disconnected search recovery, 2026-10-27
 
 The previous keyboard fix missed native focus: a handler registered before panel code still saw the Shadow DOM host as `document.activeElement` and paused playback while typing. The new native-focus regression failed before the change and passes with slotted light-DOM inputs. Space, multiword text, Enter and number stepping retain normal behavior. The existing early guard still protects buttons and fullscreen controls. A second failing regression confirmed that same-video metadata updates could replace a focused search draft; focusing a manual query now owns lookup until retry or video navigation.
