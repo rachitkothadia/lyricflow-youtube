@@ -13,6 +13,10 @@ export type GeniusPage = {
 };
 /** Personal on-demand public-page reader. No challenge bypass, remote scripts, or saved lyric corpus. */
 export class GeniusWebProvider {
+  private searches = new Map<
+    string,
+    { candidates: Candidate[]; expires: number }
+  >();
   constructor(private transport: typeof fetch = geniusTransport) {}
   private async request(url: string, signal: AbortSignal) {
     const response = await this.transport(safeGeniusUrl(url), {
@@ -52,6 +56,9 @@ export class GeniusWebProvider {
     )
       throw new Error("Enter a song query of 2–200 characters.");
     signal.throwIfAborted();
+    const key = query.trim().toLowerCase();
+    const cached = this.searches.get(key);
+    if (cached && cached.expires > Date.now()) return cached.candidates;
     const data = JSON.parse(
       await this.request(
         "https://genius.com/api/search?" +
@@ -63,7 +70,7 @@ export class GeniusWebProvider {
       throw new Error(
         "Genius returned an unreadable search response. Try again.",
       );
-    return [
+    const candidates = [
       ...new Map(
         parseGeniusResults(data).map((c) => [
           c.id,
@@ -71,6 +78,15 @@ export class GeniusWebProvider {
         ]),
       ).values(),
     ].slice(0, 10);
+    if (candidates.length) {
+      this.searches.set(key, {
+        candidates,
+        expires: Date.now() + 5 * 60 * 1000,
+      });
+      while (this.searches.size > 40)
+        this.searches.delete(this.searches.keys().next().value!);
+    }
+    return candidates;
   }
   async resolve(
     song: Song,
@@ -83,14 +99,7 @@ export class GeniusWebProvider {
       c.score! >= 0.55 || titleSimilarity(song.title, c.title) >= 0.9;
     for (const query of searchQueries(song)) {
       try {
-        const data = JSON.parse(
-          await this.request(
-            "https://genius.com/api/search?" +
-              new URLSearchParams({ q: query }),
-            signal,
-          ),
-        );
-        for (const c of parseGeniusResults(data))
+        for (const c of await this.search(query, signal))
           found.set(c.id, { ...c, provider: "genius" });
         const chosen = chooseCandidate(song, [...found.values()]);
         if (chosen)

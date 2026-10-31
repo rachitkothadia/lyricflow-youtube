@@ -1,3 +1,12 @@
+# Release 0.8.4 — bounded loading and faster lookup, 2026-10-31
+Reproduced the persistent loading state before the fix: after lyrics were displayed, a temporary missing video duration replaced them with detection skeletons; metadata then matched the existing identity, so no new result restored the panel. Duration discovery now gates only the first lookup. Missing metadata exposes recovery after six seconds, stalled RPCs have deadlines, and late correct metadata can still recover automatically.
+
+Lookup now hedges a slow LRCLIB request with Genius, cancels obsolete and losing work, paces request starts instead of serializing entire transfers, and reuses bounded positive query caches. Strict title/artist/version/duration matching remains unchanged. Safely selected plain lyrics render before optional verified-timing recovery. No song-specific production exceptions or estimated timestamps were added.
+
+Passed: build and 126 unit tests. New unit coverage verifies slow-source hedging, avoided unnecessary fallback calls, immediate fallback after a miss, ambiguous/error handling, navigation cancellation, bounded transfer scheduling, queued cancellation, cache reuse and recording-duration safety on cached data. Eight compiled-bundle lookup checks cover duration loss, duplicate prevention, bounded metadata/RPC/storage waits, manual recovery, late metadata and cancellation. Existing browser, lifecycle, fullscreen, sync, manual-control, product, keyboard, Romanization, Genius-search and runtime-recovery checks also passed: 324 total. Regression results are recorded in the release receipt under `output/reliability/release-checks-0.8.4.json`.
+
+Latency/cancellation cases use controlled responses and synthetic words; they do not measure live-service performance. User-browser update and acceptance remain with the user as requested.
+
 # Release 0.8.3 — readable Indic Romanization, 2026-10-28
 The previous fallback exposed scholarly IAST diacritics, retained Sanskrit-style inherent vowels in Hindi, and mishandled decomposed nukta letters. Generated Indic output now uses familiar Latin spellings. Devanagari adds Hindi-style schwa/nasal handling and canonical nukta normalization; the existing language selector also offers a literal reading. Existing Latin text, source text, source attribution and timestamps are preserved. No song-specific production rules or lyric catalogue were added.
 

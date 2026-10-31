@@ -29,6 +29,7 @@ import {
 import { artistCredits } from "./matching/identity";
 import { alignLyrics } from "./lyrics/LyricsMatcher";
 import { videoCaptions, alignCaptionTiming } from "./timing/YouTubeCaptions";
+import { abortable } from "./lyrics/requests";
 export function start(requireExtension = false) {
   const extensionMode =
     requireExtension || (typeof chrome !== "undefined" && !!chrome.runtime?.id);
@@ -54,6 +55,8 @@ export function start(requireExtension = false) {
   let mediaTimer: ReturnType<typeof setTimeout> | undefined;
   let durationWait: ReturnType<typeof setTimeout> | undefined;
   let durationWaitExpired = false;
+  let detectionTimer: ReturnType<typeof setTimeout> | undefined;
+  let rpcSerial = 0;
   const timingLookups = new Set<string>();
   const layout = new YouTubeLayoutAdapter(reconcile);
   const panel = new LyricsPanel(layout.root.shadowRoot!);
@@ -61,52 +64,82 @@ export function start(requireExtension = false) {
   const genius = new GeniusWebProvider();
   let language: "ja" | "zh" | "ko" | "hi" | "sa" | undefined;
   let original: Lyrics | undefined;
-  async function rpc(type: string, payload: object, signal: AbortSignal) {
-    signal.throwIfAborted();
-    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
-    if (extensionMode || runtime?.id) {
-      let result;
-      try {
-        if (!runtime?.id) throw new Error(reconnectMessage);
-        result = await runtime.sendMessage({ type, ...payload });
-        if (!result) throw new Error(reconnectMessage);
-      } catch (error) {
-        if (
-          !runtime?.id ||
-          /context invalidated|receiving end does not exist|could not establish connection/i.test(
-            error instanceof Error ? error.message : "",
-          )
-        )
-          throw new Error(reconnectMessage);
-        throw error;
-      }
-      if (result?.error) throw new Error(result.error);
-      return result;
+  async function rpc(type: string, payload: object, parent: AbortSignal) {
+    const timeout = AbortSignal.timeout(
+      type.startsWith("TIMING_") && type !== "TIMING_FIND" ? 3000 : 16000,
+    );
+    const signal = AbortSignal.any([parent, timeout]);
+    try {
+      return await abortable(send(), signal);
+    } catch (error) {
+      if (timeout.aborted && !parent.aborted)
+        throw new Error(
+          "Lyrics search took too long. Retry or search Genius below.",
+        );
+      throw error;
     }
-    if (type === "TIMING_LOAD") return { profile: null };
-    if (type === "TIMING_SAVE") return { ok: true };
-    if (type === "GENIUS_SEARCH")
-      return {
-        candidates: await genius.search(
-          (payload as { query: string }).query,
+    async function send() {
+      signal.throwIfAborted();
+      const runtime =
+        typeof chrome !== "undefined" ? chrome.runtime : undefined;
+      if (extensionMode || runtime?.id) {
+        let result;
+        const requestId = Date.now().toString(36) + "-" + ++rpcSerial;
+        const cancel = () => {
+          try {
+            void runtime
+              ?.sendMessage({ type: "LYRICS_CANCEL", requestId })
+              .catch(() => {});
+          } catch {}
+        };
+        try {
+          if (!runtime?.id) throw new Error(reconnectMessage);
+          signal.addEventListener("abort", cancel, { once: true });
+          result = await abortable(
+            runtime.sendMessage({ type, ...payload, requestId }),
+            signal,
+          );
+          if (!result) throw new Error(reconnectMessage);
+        } catch (error) {
+          if (
+            !runtime?.id ||
+            /context invalidated|receiving end does not exist|could not establish connection/i.test(
+              error instanceof Error ? error.message : "",
+            )
+          )
+            throw new Error(reconnectMessage);
+          throw error;
+        } finally {
+          signal.removeEventListener("abort", cancel);
+        }
+        if (result?.error) throw new Error(result.error);
+        return result;
+      }
+      if (type === "TIMING_LOAD") return { profile: null };
+      if (type === "TIMING_SAVE") return { ok: true };
+      if (type === "GENIUS_SEARCH")
+        return {
+          candidates: await genius.search(
+            (payload as { query: string }).query,
+            signal,
+          ),
+        };
+      if (
+        type === "GENIUS_PAGE" ||
+        (type === "LYRICS_GET" && (payload as Candidate).provider === "genius")
+      )
+        return genius.page(
+          (payload as { url: string }).url,
+          (payload as { song: Song }).song,
           signal,
-        ),
-      };
-    if (
-      type === "GENIUS_PAGE" ||
-      (type === "LYRICS_GET" && (payload as Candidate).provider === "genius")
-    )
-      return genius.page(
-        (payload as { url: string }).url,
-        (payload as { song: Song }).song,
-        signal,
-      );
-    if (type === "LYRICS_GET")
-      return {
-        kind: "ready",
-        lyrics: await provider.getById((payload as Candidate).id, signal),
-      };
-    return provider.resolve((payload as { song: Song }).song, signal);
+        );
+      if (type === "LYRICS_GET")
+        return {
+          kind: "ready",
+          lyrics: await provider.getById((payload as Candidate).id, signal),
+        };
+      return provider.resolve((payload as { song: Song }).song, signal);
+    }
   }
   async function prepare(data: Lyrics, seq: number) {
     const nextKey = timingKey(key, data, recordingDuration(video)),
@@ -279,6 +312,7 @@ export function start(requireExtension = false) {
     }
   }
   async function load(song: Song, id?: number, candidate?: Candidate) {
+    clearTimeout(detectionTimer);
     reset();
     current = song;
     panel.state("loading", song);
@@ -378,6 +412,7 @@ export function start(requireExtension = false) {
       key = newKey;
       automatic = true;
       clearTimeout(durationWait);
+      clearTimeout(detectionTimer);
       durationWait = undefined;
       durationWaitExpired = false;
       reset();
@@ -388,6 +423,14 @@ export function start(requireExtension = false) {
         return;
       }
       panel.state("detecting");
+      detectionTimer = setTimeout(() => {
+        if (!disposed && automatic && !current && key === newKey)
+          panel.state(
+            "unavailable",
+            readMetadata() || undefined,
+            "Song details are taking too long. Search Genius below, or retry.",
+          );
+      }, 6000);
     }
     const found = findWatchVideo();
     const replaced = found !== video;
@@ -396,7 +439,7 @@ export function start(requireExtension = false) {
     if (key && automatic) {
       if (playingAd(video)) return;
       const song = readMetadata();
-      if (song && !song.duration && video && !durationWaitExpired) {
+      if (song && !current && !song.duration && video && !durationWaitExpired) {
         if (!durationWait) {
           panel.state("detecting", song);
           durationWait = setTimeout(() => {
@@ -635,6 +678,7 @@ export function start(requireExtension = false) {
     attachVideo(null);
     clearTimeout(mediaTimer);
     clearTimeout(durationWait);
+    clearTimeout(detectionTimer);
     layout.dispose();
     panel.dispose();
     theme.disconnect();

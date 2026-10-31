@@ -4,6 +4,37 @@ let timingWrites: Promise<unknown> = Promise.resolve();
 import { GeniusWebProvider } from "./lyrics/GeniusWebProvider";
 const geniusWeb = new GeniusWebProvider();
 import { LrclibProvider, recordLyrics } from "./lyrics/LrclibProvider";
+import { resolveLyrics } from "./lyrics/resolveLyrics";
+import { abortable } from "./lyrics/requests";
+const requests = new Map<string, AbortController>();
+function respond(
+  message: any,
+  tabId: number,
+  reply: (value: unknown) => void,
+  work: (signal: AbortSignal) => Promise<unknown>,
+) {
+  const key = tabId + ":" + message.requestId;
+  const controller = new AbortController();
+  if (typeof message.requestId === "string") requests.set(key, controller);
+  const timeout = AbortSignal.timeout(15000);
+  const signal = AbortSignal.any([controller.signal, timeout]);
+  void abortable(
+    Promise.resolve().then(() => work(signal)),
+    signal,
+  )
+    .then(reply, (error) =>
+      reply({
+        error: timeout.aborted
+          ? "Lyrics search took too long. Retry or search Genius below."
+          : error instanceof Error
+            ? error.message
+            : "Lyrics could not load.",
+      }),
+    )
+    .finally(() => {
+      if (requests.get(key) === controller) requests.delete(key);
+    });
+}
 import {
   startRecognition,
   stopRecognition,
@@ -20,6 +51,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     sender.id === chrome.runtime.id &&
     sender.tab?.url?.startsWith("https://www.youtube.com/")
   ) {
+    if (message?.type === "LYRICS_CANCEL") {
+      if (typeof message.requestId === "string")
+        requests.get(sender.tab!.id + ":" + message.requestId)?.abort();
+      reply({ ok: true });
+      return false;
+    }
     if (message?.type === "TIMING_LOAD" || message?.type === "TIMING_SAVE") {
       if (
         typeof message.key !== "string" ||
@@ -69,10 +106,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         reply({ error: "Invalid song." });
         return false;
       }
-      void lyricsProvider
-        .resolve(message.song, AbortSignal.timeout(15000))
-        .then(reply)
-        .catch((e) => reply({ error: e.message }));
+      respond(message, sender.tab.id!, reply, (signal) =>
+        lyricsProvider.resolve(message.song, signal),
+      );
       return true;
     }
     if (message?.type === "GENIUS_PAGE") {
@@ -80,22 +116,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         reply({ error: "Select a valid song first." });
         return false;
       }
-      void geniusWeb
-        .page(message.url, message.song, AbortSignal.timeout(15000))
-        .then(reply)
-        .catch((e) => reply({ error: e.message }));
+      respond(message, sender.tab.id!, reply, (signal) =>
+        geniusWeb.page(message.url, message.song, signal),
+      );
       return true;
     }
     if (message?.type === "GENIUS_SEARCH") {
-      void geniusWeb
-        .search(message.query, AbortSignal.timeout(15000))
-        .then((candidates) => reply({ candidates }))
-        .catch((error) =>
-          reply({
-            error:
-              error instanceof Error ? error.message : "Genius search failed.",
-          }),
-        );
+      respond(message, sender.tab.id!, reply, async (signal) => ({
+        candidates: await geniusWeb.search(message.query, signal),
+      }));
       return true;
     }
     if (message?.type === "STOP_AUDIO") {
@@ -109,8 +138,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         reply({ error: "Invalid song." });
         return false;
       }
-      const signal = AbortSignal.timeout(30000);
-      void (async () => {
+      respond(message, sender.tab.id!, reply, async (signal) => {
         if (message.type === "LYRICS_GET") {
           if (message.provider === "genius")
             return geniusWeb.page(message.url, message.song, signal);
@@ -119,30 +147,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
             lyrics: await lyricsProvider.getById(message.id, signal),
           };
         }
-        let result;
-        let failure;
-        try {
-          result = await lyricsProvider.resolve(song, signal);
-        } catch (error) {
-          failure = error;
-        }
-        if (result?.kind === "ready") return result;
-        try {
-          const genius = await geniusWeb.resolve(song, signal);
-          if (genius) return genius;
-        } catch (error) {
-          if (!result || result.kind === "not-found") throw error;
-        }
-        if (result) return result;
-        throw failure;
-      })()
-        .then(reply)
-        .catch((error) =>
-          reply({
-            error:
-              error instanceof Error ? error.message : "Lyrics could not load.",
-          }),
-        );
+        return resolveLyrics(song, lyricsProvider, geniusWeb, signal);
+      });
       return true;
     }
   }

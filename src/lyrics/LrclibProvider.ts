@@ -15,6 +15,7 @@ import {
   Song,
   normalize,
 } from "../model";
+import { abortable, RequestScheduler } from "./requests";
 
 export interface LrclibRecord {
   id: number;
@@ -274,87 +275,95 @@ export function recordLyrics(record: LrclibRecord): Lyrics {
     romanized: isLatin(lines.map((l) => l.text).join("\n")),
   };
 }
-let queue: Promise<unknown> = Promise.resolve(),
-  nextRequest = 0,
-  blockedUntil = 0;
+const scheduler = new RequestScheduler();
+let blockedUntil = 0;
 const recordsCache = new Map<
   number,
   { record: LrclibRecord; expires: number }
 >();
 export class LrclibProvider {
+  private searches = new Map<string, { value: unknown; expires: number }>();
   constructor(private transport: typeof fetch = fetch.bind(globalThis)) {}
   private request(path: string, signal: AbortSignal): Promise<unknown> {
-    const operation = queue
-      .catch(() => {})
-      .then(async () => {
-        signal.throwIfAborted();
-        if (Date.now() < blockedUntil)
-          throw new ProviderError(
-            "rate-limit",
-            "Lyrics service asked us to wait. Try again later.",
-          );
-        const delay = Math.max(0, nextRequest - Date.now());
-        if (delay) await new Promise((r) => setTimeout(r, delay));
-        signal.throwIfAborted();
-        const timeout = AbortSignal.timeout(12000);
-        const combined = AbortSignal.any([signal, timeout]);
-        try {
-          let attempt = 0;
-          let r: Response;
-          while (true) {
-            r = await this.transport("https://lrclib.net" + path, {
-              headers: {
-                "Lrclib-Client":
-                  "LyricFlow/0.2 (local Chrome extension; https://lrclib.net)",
-              },
-              signal: combined,
-              credentials: "omit",
-              redirect: "error",
-            });
-            if (r.status !== 503 || attempt++ >= 2) break;
-            const wait = Number(r.headers.get("Retry-After") || "2");
-            if (!Number.isFinite(wait) || wait > 5) break;
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.max(1, wait) * 1000),
-            );
-            combined.throwIfAborted();
-          }
-          if (r.status === 429 || r.status === 503) {
-            const retry = r.headers.get("Retry-After");
-            const seconds =
-              retry && /^\d+$/.test(retry)
-                ? Number(retry)
-                : Math.max(
-                    1,
-                    ((retry ? Date.parse(retry) : 0) - Date.now()) / 1000,
-                  ) || 60;
-            if (r.status === 429 || retry)
-              blockedUntil =
-                Date.now() + Math.max(1, Math.min(seconds, 3600)) * 1000;
-            throw new ProviderError(
-              "rate-limit",
-              "Lyrics service is busy. Please retry later.",
-            );
-          }
-          if (r.status === 404) return null;
-          if (!r.ok)
-            throw new ProviderError(
-              "network",
-              `Lyrics service returned ${r.status}.`,
-            );
-          const body = await r.text();
-          if (body.length > 3000000)
-            throw new ProviderError(
-              "invalid-response",
-              "Lyrics response is too large.",
-            );
-          return JSON.parse(body);
-        } finally {
-          nextRequest = Date.now() + 1000;
-        }
-      });
-    queue = operation;
-    return operation;
+    signal.throwIfAborted();
+    const cached = this.searches.get(path);
+    if (cached && cached.expires > Date.now())
+      return Promise.resolve(cached.value);
+    return scheduler.run(async () => {
+      signal.throwIfAborted();
+      if (Date.now() < blockedUntil)
+        throw new ProviderError(
+          "rate-limit",
+          "Lyrics service asked us to wait. Try again later.",
+        );
+      const timeout = AbortSignal.timeout(12000);
+      const combined = AbortSignal.any([signal, timeout]);
+      let attempt = 0;
+      let r: Response;
+      while (true) {
+        r = await abortable(
+          this.transport("https://lrclib.net" + path, {
+            headers: {
+              "Lrclib-Client":
+                "LyricFlow/0.2 (local Chrome extension; https://lrclib.net)",
+            },
+            signal: combined,
+            credentials: "omit",
+            redirect: "error",
+          }),
+          combined,
+        );
+        if (r.status !== 503 || attempt++ >= 2) break;
+        const wait = Number(r.headers.get("Retry-After") || "2");
+        if (!Number.isFinite(wait) || wait > 5) break;
+        await abortable(
+          new Promise((resolve) =>
+            setTimeout(resolve, Math.max(1, wait) * 1000),
+          ),
+          combined,
+        );
+        combined.throwIfAborted();
+      }
+      if (r.status === 429 || r.status === 503) {
+        const retry = r.headers.get("Retry-After");
+        const seconds =
+          retry && /^\d+$/.test(retry)
+            ? Number(retry)
+            : Math.max(
+                1,
+                ((retry ? Date.parse(retry) : 0) - Date.now()) / 1000,
+              ) || 60;
+        if (r.status === 429 || retry)
+          blockedUntil =
+            Date.now() + Math.max(1, Math.min(seconds, 3600)) * 1000;
+        throw new ProviderError(
+          "rate-limit",
+          "Lyrics service is busy. Please retry later.",
+        );
+      }
+      if (r.status === 404) return null;
+      if (!r.ok)
+        throw new ProviderError(
+          "network",
+          `Lyrics service returned ${r.status}.`,
+        );
+      const body = await abortable(r.text(), combined);
+      if (body.length > 3000000)
+        throw new ProviderError(
+          "invalid-response",
+          "Lyrics response is too large.",
+        );
+      const value = JSON.parse(body);
+      if (
+        Array.isArray(value) &&
+        value.some((item) => !!validateRecord(item))
+      ) {
+        this.searches.set(path, { value, expires: Date.now() + 5 * 60 * 1000 });
+        while (this.searches.size > 40)
+          this.searches.delete(this.searches.keys().next().value!);
+      }
+      return value;
+    }, signal);
   }
   private cache(records: LrclibRecord[]) {
     for (const r of records) {
@@ -366,7 +375,11 @@ export class LrclibProvider {
     while (recordsCache.size > 60)
       recordsCache.delete(recordsCache.keys().next().value!);
   }
-  async search(song: Song, signal: AbortSignal): Promise<LrclibRecord[]> {
+  async search(
+    song: Song,
+    signal: AbortSignal,
+    fast = false,
+  ): Promise<LrclibRecord[]> {
     const params = new URLSearchParams({ track_name: song.title });
     const names = song.artists?.length
       ? song.artists
@@ -381,7 +394,10 @@ export class LrclibProvider {
     let records = value
       .map(validateRecord)
       .filter((r): r is LrclibRecord => !!r);
-    if (!selectRecord(song, records.filter(hasVerifiedTiming))) {
+    if (
+      !selectRecord(song, records.filter(hasVerifiedTiming)) &&
+      !(fast && selectRecord(song, records))
+    ) {
       try {
         value = await this.request(
           "/api/search?" +
@@ -426,10 +442,14 @@ export class LrclibProvider {
     this.cache([record]);
     return recordLyrics(record);
   }
-  async resolve(song: Song, signal: AbortSignal): Promise<Resolution> {
+  async resolve(
+    song: Song,
+    signal: AbortSignal,
+    fast = false,
+  ): Promise<Resolution> {
     const found = new Map<number, LrclibRecord>();
     for (const hint of hypotheses(song)) {
-      for (const record of await this.search(hint, signal))
+      for (const record of await this.search(hint, signal, fast))
         found.set(record.id, record);
       const chosen = chooseRecord(song, [...found.values()]);
       if (chosen) {
