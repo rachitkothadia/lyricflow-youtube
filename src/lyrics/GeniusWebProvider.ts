@@ -140,6 +140,11 @@ async function geniusTransport(
       );
       init?.signal?.throwIfAborted();
       if (result?.error) throw new Error(result.error);
+      if (result.status === 403) {
+        // Try the browser's ordinary extension transport; no cookies or challenge bypass.
+        const direct = await fetch(input, { ...init, credentials: "omit", redirect: "error" }).catch(() => null);
+        if (direct?.ok) return direct;
+      }
       return new Response(result.body, { status: result.status });
     } catch (error) {
       if (init?.signal?.aborted) throw error;

@@ -95,7 +95,7 @@ try {
   check(
     "typed delay changes the actual video seek target",
     Math.abs(
-      (await page.locator("video").evaluate((e) => e.currentTime)) - 18.3,
+      (await page.locator("video").evaluate((e) => e.currentTime)) - 13.7,
     ) < 0.5,
   );
   await menu();
@@ -108,7 +108,7 @@ try {
   check(
     "typed negative delay changes the actual video seek target",
     Math.abs(
-      (await page.locator("video").evaluate((e) => e.currentTime)) - 14.8,
+      (await page.locator("video").evaluate((e) => e.currentTime)) - 17.2,
     ) < 0.5,
   );
   await menu();

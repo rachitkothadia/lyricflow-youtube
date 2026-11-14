@@ -165,6 +165,19 @@ export class LyricsPanel {
   private button(text: string, callback: () => void) {
     const b = el("button", text);
     b.type = "button";
+    const icons: Record<string, string> = {
+      Search: "⌕",
+      Retry: "↻",
+      Reset: "↺",
+      "Correct song": "✎",
+      "Match a line to the music": "◎",
+      "Load Genius lyrics": "↗",
+    };
+    if (icons[text]) {
+      const icon = el("span", icons[text], "control-icon");
+      icon.setAttribute("aria-hidden", "true");
+      b.prepend(icon);
+    }
     b.onclick = callback;
     return b;
   }
@@ -193,7 +206,7 @@ export class LyricsPanel {
     const query = el("input");
     query.type = "text";
     query.maxLength = 200;
-    query.placeholder = "Artist - Song";
+    query.placeholder = "Song, artist or Genius link";
     query.setAttribute("aria-label", "Search lyrics");
     controls.append(
       this.button("Retry", () => {
@@ -202,14 +215,10 @@ export class LyricsPanel {
       }),
       this.button("Correct song", () => query.focus()),
     );
-    const ql = el("label", "Search lyrics");
+    const ql = el("label", "Song, artist or Genius link");
     ql.append(this.projectInput(query));
     ql.onclick = () => query.focus();
     const search = this.button("Search", () => {
-      this.settings.open = false;
-      this.onSearch(query.value);
-    });
-    const geniusSearch = this.button("Search Genius", () => {
       this.settings.open = false;
       this.onGeniusSearch(query.value);
     });
@@ -265,7 +274,7 @@ export class LyricsPanel {
     const setOffset = (value: number) => {
       const rounded = Math.max(-10, Math.min(10, Math.round(value * 10) / 10));
       offset.value = rounded.toFixed(1);
-      this.onOffset(rounded);
+      this.onOffset(-rounded);
     };
     offset.oninput = () => {
       if (Number.isFinite(offset.valueAsNumber)) {
@@ -273,7 +282,7 @@ export class LyricsPanel {
           -10,
           Math.min(10, Math.round(offset.valueAsNumber * 10) / 10),
         );
-        this.onOffset(value);
+        this.onOffset(-value);
       }
     };
     offset.onchange = () =>
@@ -284,11 +293,11 @@ export class LyricsPanel {
     const earlier = this.button("−0.1", () =>
       setOffset(Number(offset.value) - 0.1),
     );
-    earlier.setAttribute("aria-label", "Lyrics earlier by 0.1 seconds");
+    earlier.setAttribute("aria-label", "Move lyrics back by 0.1 seconds");
     const later = this.button("+0.1", () =>
       setOffset(Number(offset.value) + 0.1),
     );
-    later.setAttribute("aria-label", "Lyrics later by 0.1 seconds");
+    later.setAttribute("aria-label", "Move lyrics forward by 0.1 seconds");
     stepper.append(
       earlier,
       this.projectInput(offset),
@@ -320,7 +329,7 @@ export class LyricsPanel {
     this.timingMessage.setAttribute("aria-live", "polite");
     const offsetHint = el(
       "p",
-      "Positive delays lyrics; negative brings them earlier. Applies to this song.",
+      "Lyrics ahead? Press − to move them back. Lyrics behind? Press +. Saved for this video.",
       "timing-hint",
     );
     const source = el("input");
@@ -369,6 +378,10 @@ export class LyricsPanel {
       }
     };
     advanced.append(
+      sl,
+      useSource,
+      this.timingVersions,
+      this.button("Use matching video captions", () => this.onVideoTiming()),
       fl,
       ml,
       this.button("Try synthetic demo", () => {
@@ -382,7 +395,6 @@ export class LyricsPanel {
       controls,
       ql,
       search,
-      geniusSearch,
       palette,
       language,
       ol,
@@ -390,13 +402,6 @@ export class LyricsPanel {
       offsetHint,
       this.calibrationButton,
       this.timingMessage,
-      this.button("Use matching video captions", () => {
-        this.settings.open = false;
-        this.onVideoTiming();
-      }),
-      this.timingVersions,
-      sl,
-      useSource,
       advanced,
       this.info,
       this.audioMessage,
@@ -424,9 +429,9 @@ export class LyricsPanel {
   }
   timingCorrection(base: number, fine: number, replaceInput = false) {
     if (replaceInput) {
-      this.offsetInput.value = fine.toFixed(1);
+      this.offsetInput.value = (-fine).toFixed(1);
     }
-    const total = Math.round((base + fine) * 10) / 10;
+    const total = -Math.round((base + fine) * 10) / 10;
     this.timingMessage.textContent = total
       ? `Current correction: ${total > 0 ? "+" : ""}${total.toFixed(1)} s${base ? " · aligned to this recording" : ""}`
       : "No timing correction";
@@ -530,6 +535,15 @@ export class LyricsPanel {
         this.viewport.append(el("div", undefined, "skeleton"));
     } else if (message) {
       this.viewport.append(el("p", message, "message"));
+      if (/Genius.*(declined|blocked)/i.test(message)) {
+        const link = el("a", "Open Genius search ↗", "source-action");
+        link.href =
+          "https://genius.com/search?" +
+          new URLSearchParams({ q: this.geniusQuery.value });
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        this.viewport.append(link);
+      }
       if (message.includes("Reload this YouTube tab"))
         this.viewport.append(
           this.button("Reload YouTube", () => this.onReload()),

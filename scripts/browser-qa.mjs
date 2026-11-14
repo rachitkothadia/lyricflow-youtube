@@ -190,7 +190,7 @@ try {
       .evaluate((e) => getComputedStyle(e).transitionDuration === "0s"),
   );
   await page.getByText("Sources & settings", { exact: true }).click();
-  await page.getByLabel("Timing offset (seconds)").fill("2");
+  await page.getByLabel("Timing offset (seconds)").fill("-2");
   await page.evaluate(() => (document.querySelector("video").currentTime = 9));
   await page.waitForFunction(() =>
     document

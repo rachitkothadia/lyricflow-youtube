@@ -78,13 +78,11 @@ try {
       .getByRole("button", { name: "Try synthetic demo", exact: true })
       .click();
     await menu();
-    await page
-      .locator("input[type=file]")
-      .setInputFiles({
-        name: "synthetic.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(payload)),
-      });
+    await page.locator("input[type=file]").setInputFiles({
+      name: "synthetic.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(payload)),
+    });
     await page.waitForFunction(
       () =>
         document.querySelector("#lyricflow-root").shadowRoot.querySelector("h2")
@@ -112,16 +110,16 @@ try {
   await pauseAt(14);
   await active(12);
   await menu();
-  await offset.fill("3");
-  await offset.blur();
-  await active(8);
-  check("positive delay updates paused highlight immediately", true);
   await offset.fill("-3");
   await offset.blur();
-  await active(16);
-  check("negative delay updates paused highlight immediately", true);
-  await page.locator("video").evaluate((v) => v.play());
+  await active(8);
+  check("negative adjustment moves paused lyrics back immediately", true);
   await offset.fill("3");
+  await offset.blur();
+  await active(16);
+  check("positive adjustment moves paused lyrics forward immediately", true);
+  await page.locator("video").evaluate((v) => v.play());
+  await offset.fill("-3");
   await offset.blur();
   await active(8);
   check(
@@ -141,7 +139,7 @@ try {
     ) < 0.01,
   );
   await menu();
-  await offset.fill("0.3");
+  await offset.fill("-0.3");
   await offset.blur();
   await pauseAt(33);
   await active(12);
@@ -158,6 +156,15 @@ try {
   const worker =
     context.serviceWorkers()[0] ||
     (await context.waitForEvent("serviceworker"));
+  await worker.evaluate(async () => {
+    for (let i = 0; i < 50; i++) {
+      const p =
+        (await chrome.storage.local.get("timingCorrections"))
+          .timingCorrections || {};
+      if (Object.values(p).some((p) => p.base === 20 && p.fine === 0.3)) return;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  });
   const profiles = await worker.evaluate(
     async () =>
       (await chrome.storage.local.get("timingCorrections")).timingCorrections,
@@ -168,13 +175,17 @@ try {
   );
   await load();
   await menu();
+  await offset.evaluate(async (e) => {
+    for (let i = 0; i < 100 && e.value !== "-0.3"; i++)
+      await new Promise((r) => setTimeout(r, 20));
+  });
   check(
     "same recording restores fine delay after reload",
-    (await offset.inputValue()) === "0.3",
+    (await offset.inputValue()) === "-0.3",
   );
   check(
     "same recording restores line alignment",
-    (await page.locator(".timing-state").textContent()).includes("+20.3"),
+    (await page.locator(".timing-state").textContent()).includes("-20.3"),
   );
   await load("timings002b");
   await menu();
@@ -363,6 +374,7 @@ try {
       await clock.getByLabel("Lyrics options", { exact: true }).click();
   };
   await clockMenu();
+  await clock.getByText("More settings", { exact: true }).evaluate(e => e.parentElement.open = true);
   await clock
     .getByRole("button", { name: "Use matching video captions", exact: true })
     .click();
@@ -390,6 +402,7 @@ try {
       (await clock.locator(".line").first().textContent()) === "Synthetic 0",
   );
   mismatch = true;
+  await clock.getByText("More settings", { exact: true }).evaluate(e => e.parentElement.open = true);
   await clock
     .getByRole("button", { name: "Use matching video captions", exact: true })
     .click();
@@ -413,6 +426,7 @@ try {
   });
   await clock.locator("button.line").first().waitFor();
   await clockMenu();
+  await clock.getByText("More settings", { exact: true }).evaluate(e => e.parentElement.open = true);
   await clock
     .getByRole("button", { name: "Use matching video captions", exact: true })
     .click();
