@@ -5,8 +5,13 @@ import { GeniusWebProvider } from "./lyrics/GeniusWebProvider";
 const geniusWeb = new GeniusWebProvider();
 import { LrclibProvider, recordLyrics } from "./lyrics/LrclibProvider";
 import { resolveLyrics } from "./lyrics/resolveLyrics";
-import { parseMetadata } from "./recognition/YouTubeMetadataRecognizer";
+import {
+  connectGenius,
+  geniusSessionReady,
+  restoreGeniusSession,
+} from "./lyrics/GeniusSession";
 import { abortable } from "./lyrics/requests";
+restoreGeniusSession();
 const requests = new Map<string, AbortController>();
 function respond(
   message: any,
@@ -20,7 +25,12 @@ function respond(
   const timeout = AbortSignal.timeout(15000);
   const signal = AbortSignal.any([controller.signal, timeout]);
   void abortable(
-    Promise.resolve().then(() => work(signal)),
+    Promise.resolve()
+      .then(() => work(signal))
+      .catch((error) => ({
+        error:
+          error instanceof Error ? error.message : "Lyrics could not load.",
+      })),
     signal,
   )
     .then(reply, (error) =>
@@ -47,11 +57,22 @@ chrome.action.onClicked.addListener((tab) => {
 });
 void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.type === "GENIUS_SESSION_READY") {
+    void geniusSessionReady(sender, message).then(() => reply({ ok: true }));
+    return true;
+  }
   if (handleCaptureMessage(message, sender)) return false;
   if (
     sender.id === chrome.runtime.id &&
     sender.tab?.url?.startsWith("https://www.youtube.com/")
   ) {
+    if (message?.type === "GENIUS_CONNECT") {
+      void connectGenius(sender.tab.id!).then(
+        () => reply({ ok: true }),
+        (error) => reply({ error: error.message }),
+      );
+      return true;
+    }
     if (message?.type === "LYRICS_CANCEL") {
       if (typeof message.requestId === "string")
         requests.get(sender.tab!.id + ":" + message.requestId)?.abort();
@@ -124,34 +145,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     if (message?.type === "GENIUS_SEARCH") {
       respond(message, sender.tab.id!, reply, async (signal) => ({
-        candidates: await geniusWeb
-          .search(message.query, signal)
-          .catch(async (error) => {
-            if (
-              !(error instanceof Error) ||
-              !/declined|403/.test(error.message)
-            )
-              throw error;
-            const song = parseMetadata(message.query, "") || {
-              title: message.query,
-              artist: "",
-              version: "",
-            };
-            const rows = await lyricsProvider.search(song, signal, true);
-            if (!rows.length) throw error;
-            return rows
-              .slice(0, 10)
-              .map((row) => ({
-                id: row.id,
-                title: row.trackName,
-                artist: row.artistName,
-                version: "",
-                duration: row.duration,
-                provider: "lrclib" as const,
-                url: `https://lrclib.net/api/get/${row.id}`,
-                romanized: false,
-              }));
-          }),
+        candidates: await geniusWeb.search(message.query, signal),
       }));
       return true;
     }

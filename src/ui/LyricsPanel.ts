@@ -73,6 +73,7 @@ export class LyricsPanel {
   onGenius = (_url: string) => {};
   onGeniusSearch = (_query: string) => {};
   onReload = () => location.reload();
+  onConnectGenius = () => {};
   private resizeObserver?: ResizeObserver;
   private releaseKeyboard: () => void;
   private outside = (event: PointerEvent) => {
@@ -145,7 +146,11 @@ export class LyricsPanel {
     label.onclick = () => this.geniusQuery.focus();
     const submit = el("button", "Search Genius");
     submit.type = "submit";
-    this.recovery.append(label, submit);
+    this.recovery.append(
+      label,
+      submit,
+      this.button("Connect Genius", () => this.onConnectGenius()),
+    );
     this.recovery.onsubmit = (event) => {
       event.preventDefault();
       this.onGeniusSearch(this.geniusQuery.value);
@@ -535,7 +540,7 @@ export class LyricsPanel {
         this.viewport.append(el("div", undefined, "skeleton"));
     } else if (message) {
       this.viewport.append(el("p", message, "message"));
-      if (/Genius.*(declined|blocked)/i.test(message)) {
+      if (/Genius.*(declined|blocked|verification)/i.test(message)) {
         const link = el("a", "Open Genius search ↗", "source-action");
         link.href =
           "https://genius.com/search?" +

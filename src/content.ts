@@ -62,6 +62,7 @@ export function start(requireExtension = false) {
   const panel = new LyricsPanel(layout.root.shadowRoot!);
   const provider = new LrclibProvider();
   const genius = new GeniusWebProvider();
+  let retryGenius: (() => void) | undefined;
   let language: "ja" | "zh" | "ko" | "hi" | "sa" | undefined;
   let original: Lyrics | undefined;
   async function rpc(type: string, payload: object, parent: AbortSignal) {
@@ -312,6 +313,7 @@ export function start(requireExtension = false) {
     }
   }
   async function load(song: Song, id?: number, candidate?: Candidate) {
+    retryGenius = () => void load(song, id, candidate);
     clearTimeout(detectionTimer);
     reset();
     current = song;
@@ -351,6 +353,7 @@ export function start(requireExtension = false) {
     if (song) await load(song);
   }
   async function searchGenius(query: string) {
+    retryGenius = () => void searchGenius(query);
     query = query.trim();
     if (/^(?:https?:\/\/|(?:www\.)?genius\.com\/)/i.test(query)) {
       await panel.onGenius(
@@ -410,6 +413,7 @@ export function start(requireExtension = false) {
         : "";
     if (newKey !== key) {
       key = newKey;
+      retryGenius = undefined;
       automatic = true;
       clearTimeout(durationWait);
       clearTimeout(detectionTimer);
@@ -468,6 +472,7 @@ export function start(requireExtension = false) {
     );
   }
   panel.onGenius = async (url) => {
+    retryGenius = () => void panel.onGenius(url);
     automatic = false;
     const song = current || { artist: "", title: "Genius lyrics", version: "" };
     reset();
@@ -494,7 +499,16 @@ export function start(requireExtension = false) {
     language = (value as typeof language) || undefined;
     if (original) void prepare(original, ++generation);
   };
-  const audio = (message: any) => {
+  const audio = (
+    message: any,
+    _sender: chrome.runtime.MessageSender,
+    reply: (value: unknown) => void,
+  ) => {
+    if (message?.type === "GENIUS_CONNECTED") {
+      reply({ ok: true });
+      if (!loaded) retryGenius?.();
+      return;
+    }
     if (message?.type !== "LYRICFLOW_AUDIO_STATUS") return;
     panel.audioStatus(message.message);
     if (message.status === "matched" && message.song) {
@@ -507,6 +521,18 @@ export function start(requireExtension = false) {
   panel.onStopAudio = () => {
     if (typeof chrome !== "undefined" && chrome.runtime?.id)
       void chrome.runtime.sendMessage({ type: "STOP_AUDIO" });
+  };
+  panel.onConnectGenius = () => {
+    if (typeof chrome !== "undefined" && chrome.runtime?.id)
+      void chrome.runtime
+        .sendMessage({ type: "GENIUS_CONNECT" })
+        .then((result) => {
+          panel.timingError(
+            result?.error ||
+              "Finish verification in the Genius tab; your search will retry when it loads.",
+          );
+        })
+        .catch(() => panel.timingError(reconnectMessage));
   };
   panel.onRetry = () => {
     automatic = true;

@@ -25,7 +25,9 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 
 Download and extract the extension ZIP from [Releases](https://github.com/rachitkothadia/lyricflow-youtube/releases/latest). Open your browser's Extensions page, enable Developer mode, choose **Load unpacked**, and select the extracted `dist` folder. Keep the extracted files in place.
 
-LRCLIB works without Node.js. Genius fallback needs Node.js and the included local reader: on macOS, run `Install Genius Reader.command`; on Linux, run `node scripts/install-native.mjs` from the extracted folder. Reload YouTube after installation.
+LRCLIB works without Node.js. Genius supports a connected browser session (below) or the optional local reader. To install that reader on macOS, run `Install Genius Reader.command`; on Linux, run `node scripts/install-native.mjs` from the extracted folder. Reload YouTube after installation.
+
+If Genius requests browser verification, choose **Connect Genius** in the lyrics panel. Complete Genius's check yourself in the tab that opens and keep that tab open. The pending lookup retries when the page becomes readable; subsequent Genius requests use that browser session. Cookies stay in the browser. If Genius continues to block the normal website, this connection cannot override its decision.
 
 ## Install from source
 
@@ -89,7 +91,7 @@ This is an actively maintained extension. Provider availability, incorrect commu
 
 Song titles and artists are sent to the selected lyric providers. Romanization runs locally. Timing corrections store only a video/source fingerprint, adjustment and update time; up to 100 are retained locally. Caption timing uses an ordinary same-origin YouTube request already issued by its player; signed request parameters are not saved as source links. Audio is sent to AudD only after explicit activation and is discarded locally after completion or cancellation. Personal API tokens stay in browser local storage; none are shipped in this repository.
 
-The Genius reader performs ordinary public-page requests. It does not supply account cookies, solve challenges or use proxies. An upstream denial is reported as an error.
+The optional native Genius reader performs cookie-free public-page requests. Connect Genius instead uses a normal, explicitly opened browser tab and its existing session. Cookies stay in that tab and are never exported. No challenge is automated and no proxy is used. An upstream denial remains visible.
 
 ## Contributing
 

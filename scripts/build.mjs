@@ -21,6 +21,13 @@ await mkdir("dist/native", { recursive: true });
 await copyFile("native/genius-host.cjs", "dist/native/genius-host.cjs");
 await Promise.all([
   build({
+    entryPoints: ["src/genius-session-entry.ts"],
+    outfile: "dist/genius-session.js",
+    bundle: true,
+    format: "iife",
+    target: "chrome120",
+  }),
+  build({
     entryPoints: ["src/keyboard-entry.ts"],
     outfile: "dist/keyboard.js",
     bundle: true,
@@ -116,6 +123,11 @@ await writeFile(
       background: { service_worker: "background.js", type: "module" },
       options_page: "options.html",
       content_scripts: [
+        {
+          matches: ["https://genius.com/*"],
+          js: ["genius-session.js"],
+          run_at: "document_idle",
+        },
         {
           matches: ["https://www.youtube.com/*"],
           js: ["keyboard.js"],

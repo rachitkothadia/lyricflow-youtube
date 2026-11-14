@@ -5,6 +5,7 @@ import {
   parseGeniusResults,
   rankCandidates,
 } from "./GeniusProvider";
+import { sessionGeniusRequest, geniusVerification } from "./GeniusSession";
 export type GeniusPage = {
   kind: "genius-page";
   html: string;
@@ -131,6 +132,18 @@ async function geniusTransport(
   if (
     typeof chrome !== "undefined" &&
     chrome.runtime?.id &&
+    typeof chrome.tabs?.sendMessage === "function" &&
+    chrome.storage?.session
+  ) {
+    const connected = await sessionGeniusRequest(
+      String(input),
+      init?.signal || undefined,
+    );
+    if (connected) return connected;
+  }
+  if (
+    typeof chrome !== "undefined" &&
+    chrome.runtime?.id &&
     chrome.runtime.sendNativeMessage
   ) {
     try {
@@ -141,9 +154,7 @@ async function geniusTransport(
       init?.signal?.throwIfAborted();
       if (result?.error) throw new Error(result.error);
       if (result.status === 403) {
-        // Try the browser's ordinary extension transport; no cookies or challenge bypass.
-        const direct = await fetch(input, { ...init, credentials: "omit", redirect: "error" }).catch(() => null);
-        if (direct?.ok) return direct;
+        throw new Error(geniusVerification);
       }
       return new Response(result.body, { status: result.status });
     } catch (error) {
@@ -155,9 +166,7 @@ async function geniusTransport(
         )
       )
         throw error;
-      throw new Error(
-        "Install the LyricFlow local reader once to load Genius lyrics on this computer.",
-      );
+      throw new Error(geniusVerification);
     }
   }
   return fetch(input, init);
