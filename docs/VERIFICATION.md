@@ -1,3 +1,11 @@
+# Preview 0.8.7 — automatic Genius tab lifecycle, 2026-11-15
+
+Genius requests now create an inactive owned tab automatically, serialize navigation, reuse it across consecutive search/page requests and close it after a 100 ms idle grace period. Cancellation and failed ordinary loads also clean up. Human-verification pages, manually connected/activated tabs and tabs navigated away by the user are preserved. Search uses an HTML Genius search page and a same-origin API request, avoiding a dependency on content-script execution in raw JSON documents. Message checks use the sending frame URL rather than optional tab URL metadata; startup channels have bounded readiness retries and callback-compatible extension API bindings.
+
+Build and **142 unit tests passed**, including automatic resolution through the actual provider classes, connection-free retrieval, temporary-tab ownership, serial navigation, cleanup, cancellation, deadlines, worker restoration, verification preservation, sender/response validation and callback-only API behavior. Eight compiled-bundle lookup checks also passed. No timestamps are estimated and strict matching remains in place.
+
+**Installed-browser integration remains unresolved.** Disposable Chromium runs intermittently stalled during extension messaging or reader handoff. Some intermediate flows rendered lyrics and closed tabs, but the current preview has no complete passing browser acceptance run. The release is marked prerelease; it does not claim successful live Genius access or resolved Cloudflare blocking. The user's Opera acceptance remains with the user. See `output/reliability/release-checks-0.8.7.json` for the current verification receipt.
+
 # Release 0.8.6 — Genius browser-verification recovery, 2026-11-14
 Native requests and ordinary isolated-browser navigation returned HTTP 403 for the reported AFSANAY page and Genius search. The native response explicitly carried `cf-mitigated: challenge` and requested JavaScript/cookies and human verification; the user also confirmed the normal website was blocked. Cookie-free retries cannot retain a successful browser verification.
 

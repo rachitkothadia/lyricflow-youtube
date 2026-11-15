@@ -1,5 +1,7 @@
 # LyricFlow
 
+**0.8.7 preview:** automatic Genius connection and tab cleanup are implemented. Installed-browser verification is still pending; [0.8.6](https://github.com/rachitkothadia/lyricflow-youtube/releases/tag/v0.8.6) remains the stable release.
+
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Lyrics for YouTube, with local Romanization, synchronized playback when timestamps are available, and a resizable fullscreen reading panel.
@@ -25,9 +27,9 @@ Lyrics for YouTube, with local Romanization, synchronized playback when timestam
 
 Download and extract the extension ZIP from [Releases](https://github.com/rachitkothadia/lyricflow-youtube/releases/latest). Open your browser's Extensions page, enable Developer mode, choose **Load unpacked**, and select the extracted `dist` folder. Keep the extracted files in place.
 
-LRCLIB works without Node.js. Genius supports a connected browser session (below) or the optional local reader. To install that reader on macOS, run `Install Genius Reader.command`; on Linux, run `node scripts/install-native.mjs` from the extracted folder. Reload YouTube after installation.
+Node.js is not required. Genius lookups automatically open a temporary background tab without switching away from YouTube. The tab is reused while retrieving search results and lyrics, then closes after the result is received. Network loading still takes time; the tab is never closed before retrieval finishes.
 
-If Genius requests browser verification, choose **Connect Genius** in the lyrics panel. Complete Genius's check yourself in the tab that opens and keep that tab open. The pending lookup retries when the page becomes readable; subsequent Genius requests use that browser session. Cookies stay in the browser. If Genius continues to block the normal website, this connection cannot override its decision.
+If Genius requires human verification, that tab stays open in the background. Choose **Connect Genius** to bring it forward and complete the check yourself. The pending lookup resumes after verification. Tabs you open or activate yourself are preserved. Browser cookies survive temporary-tab closure and are never exported. Continued website blocking still requires Genius to accept the browser verification.
 
 ## Install from source
 
@@ -91,7 +93,7 @@ This is an actively maintained extension. Provider availability, incorrect commu
 
 Song titles and artists are sent to the selected lyric providers. Romanization runs locally. Timing corrections store only a video/source fingerprint, adjustment and update time; up to 100 are retained locally. Caption timing uses an ordinary same-origin YouTube request already issued by its player; signed request parameters are not saved as source links. Audio is sent to AudD only after explicit activation and is discarded locally after completion or cancellation. Personal API tokens stay in browser local storage; none are shipped in this repository.
 
-The optional native Genius reader performs cookie-free public-page requests. Connect Genius instead uses a normal, explicitly opened browser tab and its existing session. Cookies stay in that tab and are never exported. No challenge is automated and no proxy is used. An upstream denial remains visible.
+The optional native Genius reader performs cookie-free public-page requests. Automatic Genius lookup uses a normal temporary background tab and the browser's existing session. Cookies stay in that tab and are never exported. No challenge is automated and no proxy is used. An upstream denial remains visible.
 
 ## Contributing
 

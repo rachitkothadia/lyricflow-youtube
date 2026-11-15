@@ -9,9 +9,11 @@ import {
   connectGenius,
   geniusSessionReady,
   restoreGeniusSession,
+  forgetGeniusTab,
 } from "./lyrics/GeniusSession";
 import { abortable } from "./lyrics/requests";
 restoreGeniusSession();
+chrome.tabs.onRemoved.addListener(forgetGeniusTab);
 const requests = new Map<string, AbortController>();
 function respond(
   message: any,
@@ -57,15 +59,25 @@ chrome.action.onClicked.addListener((tab) => {
 });
 void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  if (message?.type === "GENIUS_SESSION_READY") {
+  if (
+    message?.type === "GENIUS_SESSION_READY" ||
+    message?.type === "GENIUS_SESSION_BLOCKED" ||
+    message?.type === "GENIUS_SESSION_FAILED"
+  ) {
     void geniusSessionReady(sender, message).then(() => reply({ ok: true }));
     return true;
   }
   if (handleCaptureMessage(message, sender)) return false;
   if (
     sender.id === chrome.runtime.id &&
-    sender.tab?.url?.startsWith("https://www.youtube.com/")
+    sender.tab?.id !== undefined &&
+    sender.frameId === 0 &&
+    sender.url?.startsWith("https://www.youtube.com/")
   ) {
+    if (message?.type === "LYRICS_READY") {
+      reply({ ok: true });
+      return false;
+    }
     if (message?.type === "GENIUS_CONNECT") {
       void connectGenius(sender.tab.id!).then(
         () => reply({ ok: true }),

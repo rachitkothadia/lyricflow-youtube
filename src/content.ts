@@ -29,13 +29,14 @@ import {
 import { artistCredits } from "./matching/identity";
 import { alignLyrics } from "./lyrics/LyricsMatcher";
 import { videoCaptions, alignCaptionTiming } from "./timing/YouTubeCaptions";
-import { abortable } from "./lyrics/requests";
+import { abortable, backgroundReady, extensionCall } from "./lyrics/requests";
 export function start(requireExtension = false) {
   const extensionMode =
     requireExtension || (typeof chrome !== "undefined" && !!chrome.runtime?.id);
   const reconnectMessage =
     "LyricFlow was updated or disconnected. Reload this YouTube tab to reconnect.";
   let disposed = false,
+    mounted = false,
     automatic = true,
     request = new AbortController(),
     sync: PlaybackSynchronizer | undefined,
@@ -63,6 +64,7 @@ export function start(requireExtension = false) {
   const provider = new LrclibProvider();
   const genius = new GeniusWebProvider();
   let retryGenius: (() => void) | undefined;
+  let ready: Promise<void> | undefined;
   let language: "ja" | "zh" | "ko" | "hi" | "sa" | undefined;
   let original: Lyrics | undefined;
   async function rpc(type: string, payload: object, parent: AbortSignal) {
@@ -95,9 +97,20 @@ export function start(requireExtension = false) {
         };
         try {
           if (!runtime?.id) throw new Error(reconnectMessage);
+          if (requireExtension) {
+            ready ||= backgroundReady((message) =>
+              extensionCall<any>((done) => runtime.sendMessage(message, done)),
+            ).catch((error) => {
+              ready = undefined;
+              throw error;
+            });
+            await abortable(ready, signal);
+          }
           signal.addEventListener("abort", cancel, { once: true });
           result = await abortable(
-            runtime.sendMessage({ type, ...payload, requestId }),
+            extensionCall<any>((done) =>
+              runtime.sendMessage({ type, ...payload, requestId }, done),
+            ),
             signal,
           );
           if (!result) throw new Error(reconnectMessage);
@@ -406,7 +419,7 @@ export function start(requireExtension = false) {
       );
   }
   function reconcile() {
-    if (disposed) return;
+    if (disposed || !mounted) return;
     const newKey =
       location.pathname === "/watch"
         ? new URL(location.href).searchParams.get("v") || ""
@@ -694,10 +707,12 @@ export function start(requireExtension = false) {
     attributeFilter: ["dark"],
   });
   layout.mount();
-  reconcile();
+  mounted = true;
+  const initialLookup = setTimeout(reconcile, 0);
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    clearTimeout(initialLookup);
     if (typeof chrome !== "undefined" && chrome.runtime?.id)
       chrome.runtime.onMessage.removeListener(audio);
     reset();

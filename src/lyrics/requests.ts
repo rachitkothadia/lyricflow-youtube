@@ -1,3 +1,27 @@
+/** Wake an MV3 worker before sending work; a stalled startup channel cannot hold the lookup. */
+export async function backgroundReady(
+  send: (message: { type: string }) => Promise<any>,
+) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        send({ type: "LYRICS_READY" }),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve(undefined), 250);
+        }),
+      ]);
+      if (result?.ok) return;
+    } catch {
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error(
+    "LyricFlow could not connect. Reload this YouTube tab to reconnect.",
+  );
+}
+
 /** Reject immediately on cancellation, including transports that ignore AbortSignal. */
 export function abortable<T>(
   operation: Promise<T>,
@@ -63,4 +87,24 @@ export class RequestScheduler {
     this.queue.shift()!();
     this.pump();
   }
+}
+/** Callback bindings also work in Chromium variants with unreliable API Promise delivery. */
+export function extensionCall<T>(
+  invoke: (done: (value: T) => void) => void | Promise<T>,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    try {
+      const result = invoke((value) => {
+        const error =
+          typeof chrome !== "undefined" ? chrome.runtime?.lastError : undefined;
+        if (error)
+          reject(new Error(error.message || "Extension request failed."));
+        else resolve(value);
+      });
+      if (result && typeof result.then === "function")
+        result.then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
